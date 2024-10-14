@@ -64,9 +64,6 @@
 	if (mapload && permit_ao)
 		queue_ao()
 
-	if(simulated)
-		updateVisibility(src, FALSE)
-
 	if (z_flags & ZM_MIMIC_BELOW)
 		setup_zmimic(mapload)
 

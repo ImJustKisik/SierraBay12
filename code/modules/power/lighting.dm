@@ -237,7 +237,7 @@
 			broken(TRUE)
 
 	on = powered()
-	queue_icon_update(FALSE)
+	update_icon(FALSE)
 
 	switch (dir)
 		if(NORTH)

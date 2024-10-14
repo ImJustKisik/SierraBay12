@@ -54,8 +54,7 @@ SUBSYSTEM_DEF(icon_update)
 /atom/proc/queue_icon_update(...)
 	SSicon_update.queue[src] = length(args) ? args : TRUE
 	if (SSicon_update.suspended)
-		if(!Master.map_loading) // Don't wake early if we're loading a map, it'll get woken up when the map loads.
-			SSicon_update.wake()
+		SSicon_update.wake()
 
 
 /hook/game_ready/proc/FlushIconUpdateQueue()
