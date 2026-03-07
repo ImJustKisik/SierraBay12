@@ -127,6 +127,7 @@
 		os.system_shutdown()
 
 /obj/item/modular_computer/proc/enable_computer(mob/user = null)
+	set waitfor = FALSE
 	enabled = TRUE
 	var/datum/extension/interactive/ntos/os = get_extension(src, /datum/extension/interactive/ntos)
 	if(os)

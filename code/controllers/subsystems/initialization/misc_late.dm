@@ -15,6 +15,8 @@ SUBSYSTEM_DEF(init_misc_late)
 	GLOB.using_map.build_exoplanets()
 	var/singleton/asset_cache/asset_cache = GET_SINGLETON(/singleton/asset_cache)
 	asset_cache.load()
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+	asset_registry_v2.load()
 	init_recipes()
 
 

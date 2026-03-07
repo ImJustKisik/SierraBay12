@@ -23,6 +23,62 @@ You can set verify to TRUE if you want send() to sleep until the client has the 
 	var/list/sending = list()
 	var/last_asset_job = 0 // Last job done.
 
+/proc/asset_cache_get_verify_window(client/client)
+	if(!istype(client))
+		return null
+
+	if(winexists(client, "asset_cache_browser"))
+		return "asset_cache_browser"
+
+	var/window_id = "browser_warmup"
+	if(!winexists(client, window_id))
+		show_browser(client, {"
+		<html>
+			<head>
+				<meta http-equiv='X-UA-Compatible' content='IE=edge'>
+				<meta charset='utf-8'>
+			</head>
+			<body></body>
+		</html>
+		"}, "window=[window_id];size=1x1;can_close=0;can_minimize=0;can_maximize=0;can_resize=0;titlebar=0;border=0")
+		if(client)
+			winset(client, window_id, "is-visible=false")
+
+	return window_id
+
+/proc/asset_cache_wait_for_confirm(client/client, list/assets, verify_window = null)
+	if(!istype(client))
+		return FALSE
+	if(!islist(assets) || !length(assets))
+		return TRUE
+
+	verify_window = verify_window || asset_cache_get_verify_window(client)
+	if(!verify_window)
+		return FALSE
+
+	client.sending |= assets
+	var/job = ++client.last_asset_job
+	show_browser(client, "<script>window.location.href=\"?asset_cache_confirm_arrival=[job]\"</script>", "window=[verify_window]")
+
+	var/t = 0
+	var/timeout_time = ASSET_CACHE_SEND_TIMEOUT * max(1, length(client.sending))
+	if(length(assets) == 1)
+		timeout_time += ASSET_CACHE_SEND_TIMEOUT
+
+	while(client && !client.completed_asset_jobs.Find(job) && t < timeout_time)
+		sleep(1)
+		t++
+
+	var/arrived = client && client.completed_asset_jobs.Find(job)
+	if(client)
+		client.sending -= assets
+		client.completed_asset_jobs -= job
+
+	if(!arrived)
+		asset_v2_debug("asset verify timeout count=[length(assets)] window=[verify_window]", client)
+
+	return !!arrived
+
 //This proc sends the asset to the client, but only if it needs it.
 //This proc blocks(sleeps) unless verify is set to false
 /proc/send_asset(client/client, asset_name, verify = TRUE, check_cache = TRUE)
@@ -38,34 +94,28 @@ You can set verify to TRUE if you want send() to sleep until the client has the 
 		else
 			return 0
 
-	if(check_cache && (client.cache.Find(asset_name) || client.sending.Find(asset_name)))
+	if(check_cache && (client.cache.Find(asset_name) || client.sending.Find(asset_name) || client.asset_v2_sent_keys[asset_name]))
 		return 0
 
 	var/singleton/asset_cache/asset_cache = GET_SINGLETON(/singleton/asset_cache)
-	send_rsc(client, asset_cache.cache[asset_name], asset_name)
-	if(!verify || !winexists(client, "asset_cache_browser")) // Can't access the asset cache browser, rip.
-		if (client)
-			client.cache += asset_name
-		return 1
-	if (!client)
+	if(!(asset_name in asset_cache.cache))
+		log_warning("asset_v2 legacy send_asset missing cache entry [asset_name]")
 		return 0
 
-	client.sending |= asset_name
-	var/job = ++client.last_asset_job
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+	var/logical_id = asset_registry_v2.register_legacy_named_asset(asset_name, asset_cache.cache[asset_name])
+	if(!logical_id)
+		return 0
 
-	show_browser(client, "<script>window.location.href=\"?asset_cache_confirm_arrival=[job]\"</script>", "window=asset_cache_browser")
+	var/datum/asset_entry_v2/entry = asset_registry_v2.assets_by_logical_id[logical_id]
+	if(!istype(entry))
+		return 0
 
-	var/t = 0
-	var/timeout_time = (ASSET_CACHE_SEND_TIMEOUT * length(client.sending)) + ASSET_CACHE_SEND_TIMEOUT
-	while(client && !client.completed_asset_jobs.Find(job) && t < timeout_time) // Reception is handled in Topic()
-		sleep(1) // Lock up the caller until this is received.
-		t++
+	var/sent = verify ? asset_registry_v2.send_entries(client, list(entry), "legacy", TRUE) : asset_registry_v2.send_entries(client, list(entry), "legacy", FALSE)
+	if(isnull(sent) || sent <= 0)
+		return 0
 
-	if(client)
-		client.sending -= asset_name
-		client.cache |= asset_name
-		client.completed_asset_jobs -= job
-
+	client.cache |= asset_name
 	return 1
 
 //This proc blocks(sleeps) unless verify is set to false
@@ -82,39 +132,38 @@ You can set verify to TRUE if you want send() to sleep until the client has the 
 		else
 			return 0
 
-	var/list/unreceived = asset_list - (client.cache + client.sending)
+	var/list/unreceived = asset_list.Copy()
+	unreceived -= client.cache
+	unreceived -= client.sending
+	for(var/sent_key in client.asset_v2_sent_keys)
+		unreceived -= sent_key
 	if(!unreceived || !length(unreceived))
 		return 0
 	if (length(unreceived) >= ASSET_CACHE_TELL_CLIENT_AMOUNT)
 		to_chat(client, "Sending Resources...")
+
 	var/singleton/asset_cache/asset_cache = GET_SINGLETON(/singleton/asset_cache)
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+	var/list/entries = list()
+	var/list/sent_asset_names = list()
 	for(var/asset in unreceived)
-		if (asset in asset_cache.cache)
-			send_rsc(client, asset_cache.cache[asset], asset)
+		if(!(asset in asset_cache.cache))
+			log_warning("asset_v2 legacy send_asset_list missing cache entry [asset]")
+			continue
+		var/logical_id = asset_registry_v2.register_legacy_named_asset(asset, asset_cache.cache[asset])
+		if(!logical_id)
+			continue
+		var/datum/asset_entry_v2/entry = asset_registry_v2.assets_by_logical_id[logical_id]
+		if(istype(entry))
+			entries += entry
+			sent_asset_names += asset
 
-	if(!verify || !winexists(client, "asset_cache_browser")) // Can't access the asset cache browser, rip.
-		if (client)
-			client.cache += unreceived
-		return 1
-	if (!client)
+	var/sent = verify ? asset_registry_v2.send_entries(client, entries, "legacy", TRUE) : asset_registry_v2.send_entries(client, entries, "legacy", FALSE)
+	if(isnull(sent) || sent <= 0)
 		return 0
-	client.sending |= unreceived
-	var/job = ++client.last_asset_job
 
-	show_browser(client, "<script>window.location.href=\"?asset_cache_confirm_arrival=[job]\"</script>", "window=asset_cache_browser")
-
-	var/t = 0
-	var/timeout_time = ASSET_CACHE_SEND_TIMEOUT * length(client.sending)
-	while(client && !client.completed_asset_jobs.Find(job) && t < timeout_time) // Reception is handled in Topic()
-		sleep(1) // Lock up the caller until this is received.
-		t++
-
-	if(client)
-		client.sending -= unreceived
-		client.cache |= unreceived
-		client.completed_asset_jobs -= job
-
-	return 1
+	client.cache |= sent_asset_names
+	return sent > 0
 
 //This proc will download the files without clogging up the browse() queue, used for passively sending files on connection start.
 //The proc calls procs that sleep for long times.
@@ -125,13 +174,15 @@ You can set verify to TRUE if you want send() to sleep until the client has the 
 		if (register_asset)
 			register_asset(file,files[file])
 		send_asset(client,file)
-		sleep(0) //queuing calls like this too quickly can cause issues in some client versions
+		CHECK_TICK
 
 //This proc "registers" an asset, it adds it to the cache for further use, you cannot touch it from this point on or you'll fuck things up.
 //if it's an icon or something be careful, you'll have to copy it before further use.
 /proc/register_asset(asset_name, asset)
 	var/singleton/asset_cache/asset_cache = GET_SINGLETON(/singleton/asset_cache)
 	asset_cache.cache[asset_name] = asset
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+	asset_registry_v2.register_legacy_named_asset(asset_name, asset)
 
 //Generated names do not include file extention.
 //Used mainly for code that deals with assets in a generic way
@@ -194,7 +245,8 @@ var/global/list/asset_datums = list()
 		"nano/images/",
 		"nano/images/status_icons/",
 		"nano/images/modular_computers/",
-		"nano/js/"
+		"nano/js/",
+		"nano/js/libraries/"
 	)
 	var/list/uncommon_dirs = list(
 		"nano/templates/"
@@ -330,8 +382,3 @@ var/global/list/asset_datums = list()
 	for(var/type in typesof(/datum/asset) - list(/datum/asset, /datum/asset/simple))
 		var/datum/asset/A = new type()
 		A.register()
-
-	for(var/client/C in GLOB.clients) // This is also called in client/New, but as we haven't initialized the cache until now, and it's possible the client is already connected, we risk doing it twice.
-		// Doing this to a client too soon after they've connected can cause issues, also the proc we call sleeps.
-		spawn(10)
-			getFilesSlow(C, cache, FALSE)

@@ -54,6 +54,8 @@ NanoStateManager = function () { // Renders templates from server data.
     _data = data
     _currentState.onUpdate(_data)
     _currentState.onAfterUpdate(_data)
+    if (window.hideUiLoading)
+      window.hideUiLoading()
   }
 
   // Run everything in callbacks on data and return the result.

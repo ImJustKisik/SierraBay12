@@ -4,17 +4,17 @@
   <title>Lobby</title>
   <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
   <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
-  <link rel="stylesheet" type="text/css" href="v4shim.css">
-  <link rel="stylesheet" type="text/css" href="font-awesome.css">
+  <link rel="stylesheet" type="text/css" href="{{asset:login.fontawesome.v4shim_css}}">
+  <link rel="stylesheet" type="text/css" href="{{asset:login.fontawesome.css}}">
   <style>
     @font-face {
       font-family: "Round Control";
-      src: url("round-control.woff");
+      src: url("{{asset:mods.lobbyscreen.font.round_control}}");
     }
     @font-face {
       font-family: "Courier Prime Code";
       font-weight: normal;
-      src: url("courierprime-code.woff");
+      src: url("{{asset:mods.lobbyscreen.font.courierprime_code}}");
     }
     body, html {
       margin: 0;
@@ -115,7 +115,7 @@
       margin: 0 1.5vmin;
       color: #85bab6;
 
-      background-image: url("smallbutton.png");
+      background-image: url("{{asset:mods.lobbyscreen.image.smallbutton}}");
       background-position: center center;
       background-size: 100% 100%;
 
@@ -175,7 +175,7 @@
       width: 100%;
       height: 100%;
 
-      background-image: url("smallbutton.png");
+      background-image: url("{{asset:mods.lobbyscreen.image.smallbutton}}");
       background-position: center center;
       background-size: 100% 100%;
       transition: .1s opacity;
@@ -263,8 +263,8 @@
       top: 51.1416vmin;  /* 613.7px */
     }
 
-    .center-menu__item--tl::before, .center-menu__item--bl::before { background-image: url("light_left.png"); }
-    .center-menu__item--tr::before, .center-menu__item--br::before { background-image: url("light_right.png"); }
+    .center-menu__item--tl::before, .center-menu__item--bl::before { background-image: url("{{asset:mods.lobbyscreen.image.light_left}}"); }
+    .center-menu__item--tr::before, .center-menu__item--br::before { background-image: url("{{asset:mods.lobbyscreen.image.light_right}}"); }
 
     .center-menu__item::before {
       content: "";
@@ -313,8 +313,8 @@
   </style>
 </head>
 <body>
-  <video class="video" style="display: none;" id="back-loop" src="loop.mp4" loop></video>
-  <video class="video" style="display: none;" id="back-buttons" src="buttons.mp4"></video>
+  <video class="video" style="display: none;" id="back-loop" src="{{asset:mods.lobbyscreen.video.loop}}" loop></video>
+  <video class="video" style="display: none;" id="back-buttons" src="{{asset:mods.lobbyscreen.video.buttons}}"></video>
   <div id="container">
     <div id="center-menu" style="display: none;">
         <a class="center-menu__item center-menu__item--horizontal center-menu__item--tr" href='?src=[player-ref];lobby_ready=1' id="ready"><span id="ready-text">Ready</span></a>

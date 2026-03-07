@@ -42,6 +42,22 @@
 		completed_asset_jobs += job
 		return
 
+	if(href_list["asset_v2_ui_error"])
+		var/window = html_decode(url_decode(href_list["asset_v2_ui_window"] || "unknown"))
+		var/context = html_decode(url_decode(href_list["asset_v2_ui_context"] || "unknown"))
+		var/message = html_decode(url_decode(href_list["asset_v2_ui_error"]))
+		log_error("asset_v2 ui error client=[ckey || key] window=[window] context=[context] message=[message]")
+		if(asset_v2_debug_enabled)
+			log_asset_v2_state("ui_error")
+		return
+
+	if(href_list["asset_v2_ui_debug"])
+		var/window = html_decode(url_decode(href_list["asset_v2_ui_window"] || "unknown"))
+		var/context = html_decode(url_decode(href_list["asset_v2_ui_context"] || "unknown"))
+		var/message = html_decode(url_decode(href_list["asset_v2_ui_debug"]))
+		asset_v2_debug("ui debug window=[window] context=[context] message=[message]", src)
+		return
+
 	//search the href for script injection
 	if( findtext(href,"<script",1,0) )
 		to_world_log("Attempted use of scripts within a topic call, by [src]")
@@ -209,6 +225,7 @@
 	log_client_to_db()
 
 	send_resources()
+	warm_browser_windows()
 
 	if (GLOB.changelog_hash && prefs.lastchangelog != GLOB.changelog_hash) //bolds the changelog button on the interface so we know there are updates.
 		to_chat(src, SPAN_INFO("You have unread updates in the changelog."))
@@ -258,6 +275,7 @@
 
 
 /client/Destroy()
+	close_browser(src, "window=browser_warmup")
 	for (var/datum/ticket/T in tickets)
 		if (T.status == TICKET_OPEN && T.owner.ckey == ckey)
 			message_staff("[key_name_admin(src)] has left the game with an open ticket. Status: [length(T.assigned_admins) ? "Assigned to: [english_list(T.assigned_admin_ckeys())]" : SPAN_DANGER("Unassigned.")]")
@@ -277,6 +295,38 @@
 	GLOB.clients -= src
 	..()
 	return QDEL_HINT_HARDDEL_NOW
+
+/client
+	var/browser_warmup_done = FALSE
+
+/client/proc/warm_browser_windows()
+	set waitfor = FALSE
+
+	if(browser_warmup_done || !src)
+		return
+	browser_warmup_done = TRUE
+
+	var/warmup_html = {"
+		<html>
+			<head>
+				<meta http-equiv='X-UA-Compatible' content='IE=edge'>
+				<meta charset='utf-8'>
+			</head>
+			<body style='margin:0;background:#06080c;color:#9abfe4;font:12px Verdana,sans-serif;'>
+				<div style='padding:4px 6px;letter-spacing:0.08em;text-transform:uppercase;'>Browser warm-up</div>
+			</body>
+		</html>
+	"}
+
+	asset_v2_debug("browser warm-up start", src)
+
+	if(winexists(src, "asset_cache_browser"))
+		show_browser(src, warmup_html, "window=asset_cache_browser")
+
+	show_browser(src, warmup_html, "window=browser_warmup;size=1x1;can_close=0;can_minimize=0;can_maximize=0;can_resize=0;titlebar=0;border=0")
+	if(src)
+		winset(src, "browser_warmup", "is-visible=false")
+	asset_v2_debug("browser warm-up complete", src)
 
 
 // Returns null if no DB connection can be established, or -1 if the requested key was not found in the database
@@ -432,8 +482,10 @@
 
 
 /client/proc/after_send_resources()
-	var/singleton/asset_cache/asset_cache = GET_SINGLETON(/singleton/asset_cache)
-	getFilesSlow(src, asset_cache.cache, register_asset = FALSE)
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+	asset_v2_debug("after_send_resources start", src)
+	asset_registry_v2.ensure_pack(src, ASSET_PACK_CORE_BOOTSTRAP, ASSET_V2_REASON_CONNECT)
+	log_asset_v2_connect_summary()
 
 
 /mob/proc/MayRespawn()

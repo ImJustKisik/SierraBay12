@@ -403,7 +403,8 @@ var/global/floorIsLava = 0
 				[remove_button]\
 			</div>\
 		"}
-	send_rsc(user, 'html/browser/common.css', "common.css")
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+	asset_registry_v2.ensure_legacy_named_asset(user, "common.css", 'html/browser/common.css')
 	show_browser(user, html_page_common("Player Info: [target]", body), "window=showplayernotes;size=480x480;")
 
 

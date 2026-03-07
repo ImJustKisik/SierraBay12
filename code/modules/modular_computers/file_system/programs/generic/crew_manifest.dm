@@ -14,16 +14,14 @@
 /datum/nano_module/program/crew_manifest
 	name = "Crew Manifest"
 	available_to_ai = TRUE
+	sui_interface_name = "CrewManifest"
+	sui_width = 800
+	sui_height = 600
 
-/datum/nano_module/program/crew_manifest/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, state = GLOB.default_state)
+/datum/nano_module/program/crew_manifest/ui_interact_sui(mob/user, ui_key = "main", force_open = 1, master_ui = null, datum/topic_state/state = GLOB.default_state)
+	return ..()
+
+/datum/nano_module/program/crew_manifest/sui_data(mob/user)
 	var/list/data = host.initial_data(program)
-
-	data["crew_manifest"] = html_crew_manifest(TRUE)
-
-	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
-	if (!ui)
-		ui = new(user, src, ui_key, "crew_manifest.tmpl", name, 450, 600, state = state)
-		ui.auto_update_layout = 1
-		ui.set_auto_update(1)
-		ui.set_initial_data(data)
-		ui.open()
+	data["crew_manifest"] = nano_crew_manifest()
+	return data

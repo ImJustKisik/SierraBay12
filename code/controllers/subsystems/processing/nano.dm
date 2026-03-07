@@ -56,7 +56,7 @@ PROCESSING_SUBSYSTEM_DEF(nano)
 	. = 0
 	var/src_object_key = "\ref[src_object]"
 	if (!open_uis[src_object_key])
-		return
+		return update_sui_uis(src_object)
 
 	for (var/ui_key in open_uis[src_object_key])
 		for (var/datum/nanoui/ui in open_uis[src_object_key][ui_key])
@@ -65,6 +65,7 @@ PROCESSING_SUBSYSTEM_DEF(nano)
 				.++
 			else
 				ui.close()
+	. += update_sui_uis(src_object)
 
  /**
   * Close all /nanoui uis attached to src_object
@@ -76,17 +77,13 @@ PROCESSING_SUBSYSTEM_DEF(nano)
 /datum/controller/subsystem/processing/nano/proc/close_uis(src_object)
 	. = 0
 
-	if (!length(open_uis))
-		return
-
 	var/src_object_key = "\ref[src_object]"
-	if (!open_uis[src_object_key])
-		return
-
-	for (var/ui_key in open_uis[src_object_key])
-		for (var/datum/nanoui/ui in open_uis[src_object_key][ui_key])
-			ui.close() // If it's missing src_object or user, we want to close it even more.
-			.++
+	if (length(open_uis) && open_uis[src_object_key])
+		for (var/ui_key in open_uis[src_object_key])
+			for (var/datum/nanoui/ui in open_uis[src_object_key][ui_key])
+				ui.close() // If it's missing src_object or user, we want to close it even more.
+				.++
+	. += close_sui_uis(src_object)
 
  /**
   * Update /nanoui uis belonging to user
@@ -173,7 +170,9 @@ PROCESSING_SUBSYSTEM_DEF(nano)
   * @return nothing
   */
 /datum/controller/subsystem/processing/nano/proc/user_logout(mob/user)
-	return close_user_uis(user)
+	. = close_user_uis(user)
+	. += close_user_sui_uis(user)
+	return .
 
  /**
   * This is called when a player transfers from one mob to another
@@ -185,12 +184,13 @@ PROCESSING_SUBSYSTEM_DEF(nano)
   * @return nothing
   */
 /datum/controller/subsystem/processing/nano/proc/user_transferred(mob/oldMob, mob/newMob)
-	if (!oldMob || !oldMob.open_uis)
-		return 0 // has no open uis
-
-	LAZYINITLIST(newMob.open_uis)
-	for (var/datum/nanoui/ui in oldMob.open_uis)
-		ui.user = newMob
-		newMob.open_uis += ui
-	oldMob.open_uis = null
-	return 1 // success
+	. = 0
+	if (oldMob && oldMob.open_uis)
+		LAZYINITLIST(newMob.open_uis)
+		for (var/datum/nanoui/ui in oldMob.open_uis)
+			ui.user = newMob
+			newMob.open_uis += ui
+			.++
+		oldMob.open_uis = null
+	. += transfer_user_sui_uis(oldMob, newMob)
+	return .

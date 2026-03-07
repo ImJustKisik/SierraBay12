@@ -30,8 +30,14 @@ var _helpers = {}
           templateMarkup += '<div class="clearBoth"></div>'
           try {
             NanoTemplate.addTemplate(key, templateMarkup)
+            if (window.assetV2Report)
+              window.assetV2Report('debug', 'template loaded: ' + key + ' -> ' + _templateData[key])
           }
           catch(error) {
+            if (window.setUiLoadingError)
+              window.setUiLoadingError('Template registration failed.')
+            if (window.assetV2Report)
+              window.assetV2Report('error', 'template add failed: ' + key + ' -> ' + error.message)
             alert('ERROR: An error occurred while loading the UI: ' + error.message)
             return
           }
@@ -39,6 +45,10 @@ var _helpers = {}
           loadNextTemplate()
         })
         .fail(function () {
+          if (window.setUiLoadingError)
+            window.setUiLoadingError('Template stream interrupted.')
+          if (window.assetV2Report)
+            window.assetV2Report('error', 'template ajax failed: ' + key + ' -> ' + _templateData[key])
           alert('ERROR: Loading template ' + key + '(' + _templateData[key] + ') failed!')
         })
         return
@@ -49,8 +59,14 @@ var _helpers = {}
       for (var key in _templates) {
         try {
           _compiledTemplates[key] = doT.template(_templates[key], null, _templates)
+          if (window.assetV2Report)
+            window.assetV2Report('debug', 'template compiled: ' + key)
         }
         catch (error) {
+          if (window.setUiLoadingError)
+            window.setUiLoadingError('Template compilation failed.')
+          if (window.assetV2Report)
+            window.assetV2Report('error', 'template compile failed: ' + key + ' -> ' + error.message)
           alert(error.message)
         }
       }
@@ -72,12 +88,20 @@ var _helpers = {}
     parse: function (templateKey, data) {
       if (!_compiledTemplates.hasOwnProperty(templateKey) || !_compiledTemplates[templateKey]) {
         if (!_templates.hasOwnProperty(templateKey)) {
+          if (window.setUiLoadingError)
+            window.setUiLoadingError('Required template missing.')
+          if (window.assetV2Report)
+            window.assetV2Report('error', 'template missing: ' + templateKey)
           alert('ERROR: Template "' + templateKey + '" does not exist in _compiledTemplates!')
           return '<h2>Template error (does not exist)</h2>'
         }
         compileTemplates()
       }
       if (typeof _compiledTemplates[templateKey] !== 'function') {
+        if (window.setUiLoadingError)
+          window.setUiLoadingError('Template renderer unavailable.')
+        if (window.assetV2Report)
+          window.assetV2Report('error', 'template not callable: ' + templateKey)
         alert(_compiledTemplates[templateKey])
         alert('ERROR: Template "' + templateKey + '" failed to compile!')
         return '<h2>Template error (failed to compile)</h2>'

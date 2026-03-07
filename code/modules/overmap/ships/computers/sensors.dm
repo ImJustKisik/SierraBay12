@@ -100,6 +100,9 @@
 
 
 /obj/machinery/computer/modular/preset/sensors/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1)
+	return ui_interact_sui(user)
+
+/obj/machinery/computer/modular/preset/sensors/proc/ui_interact_legacy(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1)
 	if (!linked)
 		display_reconnect_dialog(user, "sensors")
 		return
@@ -241,6 +244,174 @@
 		new/obj/item/paper/(get_turf(src), scan_data, "paper (Sensor Scan - [last_scan["name"]])", L = print_language)
 		return TOPIC_HANDLED
 
+
+// ============================================================
+// SUI (Sierra UI) Interface
+// ============================================================
+
+/**
+ * Collect sensor data into an assoc list.
+ * Shared between NanoUI ui_interact() and SUI sui_update().
+ */
+/obj/machinery/computer/modular/preset/sensors/proc/get_sensor_data(mob/user)
+	var/list/data = list()
+
+	var/obj/machinery/shipsensors/sensors = get_sensors()
+	data["allow_change"] = TRUE
+	data["viewing"] = viewing_overmap(user)
+	data["muted"] = muted
+	data["sound_off"] = sound_off
+	var/mob/living/silicon/silicon = user
+	data["viewing_silicon"] = ismachinerestricted(silicon)
+
+	if (sensors)
+		data["on"] = sensors.use_power
+		data["range"] = sensors.range
+		data["health"] = sensors.get_current_health()
+		data["max_health"] = sensors.get_max_health()
+		data["heat"] = sensors.heat
+		data["critical_heat"] = sensors.critical_heat
+		if (sensors.health_dead())
+			data["status"] = "DESTROYED"
+		else if (!sensors.powered())
+			data["status"] = "NO POWER"
+		else if (!sensors.in_vacuum())
+			data["status"] = "VACUUM SEAL BROKEN"
+		else
+			data["status"] = "OK"
+
+		var/list/known_contacts = list()
+		var/list/unknown_contacts = list()
+		var/list/potential_contacts = list()
+
+		if (sensors?.use_power)
+			for (var/obj/overmap/nearby in view(round(sensors.range,1), linked))
+				if (nearby.requires_contact)
+					continue
+				potential_contacts |= nearby
+
+		for (var/obj/overmap/visitable/contact in sensors.objects_in_view)
+			if(contact.scannable)
+				if (contact in sensors.contact_datums)
+					potential_contacts |= contact
+				else
+					var/bearing_variability = round(300/sensors.sensor_strength, 5)
+					unknown_contacts.Add(list(list(
+						"name" = contact.unknown_id,
+						"bearing" = inaccurate_bearing(get_bearing(linked, contact), bearing_variability),
+						"variability" = bearing_variability,
+						"progress" = sensors.objects_in_view[contact]
+					)))
+
+		for (var/obj/overmap/contact in potential_contacts)
+			if (linked == contact)
+				continue
+			known_contacts.Add(list(list(
+				"name" = contact.name,
+				"color" = contact.get_color(),
+				"ref" = "\ref[contact]",
+				"bearing" = get_bearing(linked, contact)
+			)))
+
+		if (length(unknown_contacts))
+			data["unknown_contacts"] = unknown_contacts
+		if (length(known_contacts))
+			data["known_contacts"] = known_contacts
+		data["last_scan"] = last_scan
+	else
+		data["status"] = "MISSING"
+		data["range"] = "N/A"
+		data["on"] = 0
+
+	return data
+
+/**
+ * Open the SUI version of the sensors interface.
+ */
+/obj/machinery/computer/modular/preset/sensors/proc/ui_interact_sui(mob/user)
+	if (!linked)
+		display_reconnect_dialog(user, "sensors")
+		return FALSE
+
+	var/datum/sui/ui = SSnano.try_update_sui(user, src, "main")
+	if (!ui)
+		ui = new /datum/sui(user, src, "ShipSensors", "[linked.name] Sensors Control", 450, 580)
+		ui.set_auto_update(TRUE)
+		ui.open(get_sensor_data(user))
+	else
+		ui.push_data(get_sensor_data(user))
+	return TRUE
+
+/**
+ * Handle SUI actions from the browser.
+ */
+/obj/machinery/computer/modular/preset/sensors/sui_act(action, list/params, datum/sui/ui)
+	if (!linked)
+		return FALSE
+
+	switch(action)
+		if("viewing")
+			if (ui.user)
+				viewing_overmap(ui.user) ? unlook(ui.user) : look(ui.user)
+			return TRUE
+
+		if("link")
+			find_sensors()
+			return TRUE
+
+		if("mute")
+			muted = !muted
+			return TRUE
+
+		if("sound_off")
+			sound_off = !sound_off
+			return TRUE
+
+		if("toggle")
+			var/obj/machinery/shipsensors/sensors = get_sensors()
+			if (sensors)
+				sensors.toggle()
+			return TRUE
+
+		if("range")
+			var/obj/machinery/shipsensors/sensors = get_sensors()
+			if (sensors)
+				var/nrange = input("Set new sensors range", "Sensor range", sensors.range) as num|null
+				if (!CanInteract(ui.user, ui.state))
+					return FALSE
+				if (nrange)
+					sensors.set_range(clamp(round(nrange), 1, world.view))
+			return TRUE
+
+		if("scan")
+			var/obj/machinery/shipsensors/sensors = get_sensors()
+			var/obj/overmap/O = locate(params["scan"])
+			if (istype(O) && !QDELETED(O))
+				if ((O in view(7,linked)) || (sensors && (O in sensors.contact_datums)))
+					playsound(loc, "sound/effects/ping.ogg", 50, 1)
+					LAZYSET(last_scan, "data", O.get_scan_data(ui.user))
+					LAZYSET(last_scan, "location", "[O.x],[O.y]")
+					LAZYSET(last_scan, "name", "[O]")
+					state_visible("Successfully scanned \the [O].")
+					return TRUE
+			state_visible(SPAN_WARNING("Could not get a scan from \the [O]!"))
+			return TRUE
+
+		if("print")
+			playsound(loc, "sound/machines/dotprinter.ogg", 30, 1)
+			var/scan_data = ""
+			for (var/scan in last_scan["data"])
+				scan_data += scan + "\n\n"
+			new/obj/item/paper/(get_turf(src), scan_data, "paper (Sensor Scan - [last_scan["name"]])", L = print_language)
+			return TRUE
+
+	return FALSE
+
+/**
+ * Push data updates for SUI auto-update.
+ */
+/obj/machinery/computer/modular/preset/sensors/sui_update(mob/user, datum/sui/ui)
+	ui.push_data(get_sensor_data(user))
 
 /obj/machinery/shipsensors
 	name = "sensors suite"

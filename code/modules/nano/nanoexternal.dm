@@ -11,19 +11,25 @@
 	set hidden = 1	// hide this verb from the user's panel
 	set name = "nanoclose"
 
-	var/datum/nanoui/ui = locate(uiref)
+	var/datum/ui = locate(uiref)
 
-	if (istype(ui))
-		ui.close()
+	if (istype(ui, /datum/nanoui))
+		var/datum/nanoui/nanoui = ui
+		nanoui.close()
 
-		if(ui.ref)
+		if(nanoui.ref)
 			var/href = "close=1"
-			src.Topic(href, params2list(href), ui.ref)	// this will direct to the atom's Topic() proc via client.Topic()
-		if (ui.on_close_logic)
+			src.Topic(href, params2list(href), nanoui.ref)	// this will direct to the atom's Topic() proc via client.Topic()
+		if (nanoui.on_close_logic)
 			// no atomref specified (or not found)
 			// so just reset the user mob's machine var
 			if(src && src.mob)
 				src.mob.unset_machine()
+		return
+
+	if(istype(ui, /datum/sui))
+		var/datum/sui/sui = ui
+		sui.close()
 
  /**
   * The ui_interact proc is used to open and update Nano UIs

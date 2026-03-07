@@ -278,10 +278,11 @@
 	var/list/dc = _datum_components
 	if(!dc)
 		return null
-	var/datum/component/C = dc[c_type]
-	if(C)
-		if(length(C))
-			C = C[1]
+	var/component_entry = dc[c_type]
+	if(component_entry)
+		var/datum/component/C = component_entry
+		if(islist(component_entry))
+			C = component_entry[1]
 		if(C.type == c_type)
 			return C
 	return null

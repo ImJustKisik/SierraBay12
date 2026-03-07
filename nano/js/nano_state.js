@@ -25,16 +25,30 @@ NanoStateClass.prototype.onBeforeUpdate = function (data) {
   return data
 }
 
+// Morphdom-powered DOM diffing: only updates changed elements, eliminating flicker.
+// Falls back to jQuery .html() if morphdom is not available.
+NanoStateClass.prototype._morphContent = function (targetId, newHtml) {
+  var el = document.getElementById(targetId)
+  if (!el) return
+  if (typeof morphdom === 'function') {
+    var tmp = document.createElement(el.tagName)
+    tmp.innerHTML = newHtml
+    morphdom(el, tmp, { childrenOnly: true })
+  } else {
+    $('#' + targetId).html(newHtml)
+  }
+}
+
 NanoStateClass.prototype.onUpdate = function (data) {
   try {
-    if (!this.layoutRendered || (data['config'].hasOwnProperty('autoUpdateLayout') && data['config']['autoUpdateLayout'])){
-      $("#uiLayout").html(NanoTemplate.parse('layout', data))
+    if (!this.layoutRendered || (data['config'].hasOwnProperty('autoUpdateLayout') && data['config']['autoUpdateLayout'])) {
+      this._morphContent('uiLayout', NanoTemplate.parse('layout', data))
       this.layoutRendered = true
     }
     if (!this.contentRendered || (data['config'].hasOwnProperty('autoUpdateContent') && data['config']['autoUpdateContent'])) {
-      $("#uiContent").html(NanoTemplate.parse('main', data))
+      this._morphContent('uiContent', NanoTemplate.parse('main', data))
       if (NanoTemplate.templateExists('layoutHeader'))
-        $("#uiHeaderContent").html(NanoTemplate.parse('layoutHeader', data))
+        this._morphContent('uiHeaderContent', NanoTemplate.parse('layoutHeader', data))
       this.contentRendered = true
     }
     if (NanoTemplate.templateExists('mapContent')) {
@@ -48,7 +62,7 @@ NanoStateClass.prototype.onUpdate = function (data) {
           })
         this.mapInitialised = true
       }
-      $("#uiMapContent").html(NanoTemplate.parse('mapContent', data))
+      this._morphContent('uiMapContent', NanoTemplate.parse('mapContent', data))
       if (data['config'].hasOwnProperty('showMap') && data['config']['showMap']) {
         $('#uiContent').addClass('hidden')
         $('#uiMapWrapper').removeClass('hidden')
@@ -59,11 +73,11 @@ NanoStateClass.prototype.onUpdate = function (data) {
       }
     }
     if (NanoTemplate.templateExists('mapHeader'))
-      $("#uiMapHeader").html(NanoTemplate.parse('mapHeader', data))
+      this._morphContent('uiMapHeader', NanoTemplate.parse('mapHeader', data))
     if (NanoTemplate.templateExists('mapFooter'))
-      $("#uiMapFooter").html(NanoTemplate.parse('mapFooter', data))
+      this._morphContent('uiMapFooter', NanoTemplate.parse('mapFooter', data))
   }
-  catch(error) {
+  catch (error) {
     alert('ERROR: An error occurred while rendering the UI: ' + error.message)
     return
   }

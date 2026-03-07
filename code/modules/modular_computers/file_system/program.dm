@@ -155,12 +155,15 @@
 	return TRUE
 
 /// This is called every tick when the program is enabled. Ensure you do parent call if you override it. If parent returns TRUE continue with UI initialisation. It returns FALSE if it can't run or if NanoModule was used instead. I suggest using NanoModules where applicable.
-/datum/computer_file/program/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1)
+/datum/computer_file/program/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, master_ui = null, datum/topic_state/state = GLOB.default_state)
 	if(program_state != PROGRAM_STATE_ACTIVE) // Our program was closed. Close the ui if it exists.
 		if(ui)
 			ui.close()
 		return computer.ui_interact(user, ui_key, null, force_open)
 	if(istype(NM))
+		if(NM.sui_interface_name)
+			NM.ui_interact_sui(user, ui_key, force_open, master_ui, state)
+			return FALSE
 		NM.ui_interact(user, ui_key, null, force_open)
 		return FALSE
 	return TRUE

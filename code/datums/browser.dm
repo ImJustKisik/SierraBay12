@@ -68,14 +68,15 @@
 /datum/browser/proc/get_header()
 	var/key
 	var/filename
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
 	for (key in stylesheets)
 		filename = "[ckey(key)].css"
-		send_rsc(user, stylesheets[key], filename)
+		asset_registry_v2.ensure_legacy_named_asset(user, filename, stylesheets[key])
 		head_content += "<link rel='stylesheet' type='text/css' href='[filename]'>"
 
 	for (key in scripts)
 		filename = "[ckey(key)].js"
-		send_rsc(user, scripts[key], filename)
+		asset_registry_v2.ensure_legacy_named_asset(user, filename, scripts[key])
 		head_content += "<script type='text/javascript' src='[filename]'></script>"
 
 	var/title_attributes = "class='uiTitle'"

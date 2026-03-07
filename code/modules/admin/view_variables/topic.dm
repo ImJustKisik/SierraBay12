@@ -498,6 +498,9 @@
 
 		SSnano.close_uis(H)
 		H.client.cache.Cut()
+		H.client.asset_v2_sent_keys.Cut()
+		H.client.asset_v2_sent_logical_ids.Cut()
+		H.client.asset_v2_packs.Cut()
 		var/datum/asset/assets = get_asset_datum(/datum/asset/nanoui)
 		assets.send(H)
 

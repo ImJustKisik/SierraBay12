@@ -12,6 +12,9 @@
 /datum/nano_module/program/ship/sensors
 	name = "Sensors Control"
 	extra_view = 4
+	sui_interface_name = "ShipSensors"
+	sui_width = 450
+	sui_height = 580
 	var/weakref/sensor_ref
 	var/list/last_scan
 	var/muted = FALSE
@@ -141,7 +144,10 @@
 /datum/nano_module/program/ship/sensors/proc/can_modify(mob/user)
 	return program.computer.get_component(/obj/item/stock_parts/computer/ship_interface) && check_access(user, modify_access_req) && program.computer.get_hardware_flag() == PROGRAM_CONSOLE
 
-/datum/nano_module/program/ship/sensors/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/ship/sensors/sui_data(mob/user)
+	return get_sensor_data(user)
+
+/datum/nano_module/program/ship/sensors/proc/get_sensor_data(mob/user)
 	var/list/data = host.initial_data()
 	var/obj/machinery/shipsensors/sensors = get_sensors()
 
@@ -149,7 +155,8 @@
 	data["viewing"] = viewing_overmap(user)
 	data["muted"] = muted
 	data["sound_off"] = sound_off
-	data["allowchange"] = can_modify(user)
+	data["allow_change"] = can_modify(user)
+	data["allowchange"] = data["allow_change"]
 	var/mob/living/silicon/silicon = user
 	data["viewing_silicon"] = ismachinerestricted(silicon)
 	if (sensors)
@@ -213,9 +220,16 @@
 		data["range"] = "N/A"
 		data["on"] = 0
 
+	return data
+
+/datum/nano_module/program/ship/sensors/proc/ui_interact_legacy(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = get_sensor_data(user)
+	var/title_prefix = linked ? "[linked.name] " : ""
+	var/ui_title = "[title_prefix]Sensors Control"
+
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
-		ui = new(user, src, ui_key, "shipsensors.tmpl", "[linked.name] Sensors Control", 420, 530, src)
+		ui = new(user, src, ui_key, "shipsensors.tmpl", ui_title, 420, 530, src)
 		ui.set_initial_data(data)
 		ui.open()
 		ui.set_auto_update(1)
@@ -280,3 +294,67 @@
 		if (!program.computer.print_paper(scan_data, "paper (Sensor Scan - [last_scan["name"]])"))
 			to_chat(usr, SPAN_NOTICE("Hardware Error: Printer was unable to print the selected file."))
 		return TOPIC_HANDLED
+
+/datum/nano_module/program/ship/sensors/sui_act(action, list/params, datum/sui/ui)
+	if (!linked)
+		return FALSE
+
+	switch(action)
+		if("viewing")
+			if (ui.user)
+				viewing_overmap(ui.user) ? unlook(ui.user) : look(ui.user)
+			return TRUE
+
+		if("link")
+			find_sensors()
+			return TRUE
+
+		if("mute")
+			muted = !muted
+			return TRUE
+
+		if("sound_off")
+			sound_off = !sound_off
+			return TRUE
+
+	var/obj/machinery/shipsensors/sensors = get_sensors()
+	if (sensors)
+		switch(action)
+			if("range")
+				if (!can_modify(ui.user))
+					return FALSE
+				var/nrange = input("Set new sensors range", "Sensor range", sensors.range) as num|null
+				if (!can_still_topic(ui.state))
+					return FALSE
+				if (nrange)
+					sensors.set_range(clamp(round(nrange), 1, world.view))
+				return TRUE
+
+			if("toggle")
+				if (!can_modify(ui.user))
+					return FALSE
+				sensors.toggle()
+				return TRUE
+
+	if (action == "scan")
+		var/obj/overmap/O = locate(params["scan"])
+		if (istype(O) && !QDELETED(O))
+			if ((O in view(7,linked)) || (sensors && (O in sensors.contact_datums)))
+				program.computer.audible_notification("sound/effects/ping.ogg")
+				LAZYSET(last_scan, "data", O.get_scan_data(ui.user))
+				LAZYSET(last_scan, "location", "[O.x],[O.y]")
+				LAZYSET(last_scan, "name", "[O]")
+				state_visible("Successfully scanned \the [O].")
+				return TRUE
+		state_visible(SPAN_WARNING("Could not get a scan from \the [O]!"))
+		return TRUE
+
+	if (action == "print")
+		var/scan_data = ""
+		for (var/scan in last_scan["data"])
+			scan_data += scan + "\n\n"
+		if (!program.computer.print_paper(scan_data, "paper (Sensor Scan - [last_scan["name"]])"))
+			to_chat(ui.user, SPAN_NOTICE("Hardware Error: Printer was unable to print the selected file."))
+		return TRUE
+
+	return FALSE

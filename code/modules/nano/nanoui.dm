@@ -53,6 +53,8 @@ nanoui is used to open and update nano browser uis
 	var/is_auto_updating = 0
 	// the current status/visibility of the ui
 	var/status = STATUS_INTERACTIVE
+	// opt-in path for the asset registry v2
+	var/use_asset_v2 = FALSE
 
 	// Relationship between a master interface and its children. Used in update_status
 	var/datum/nanoui/master_ui
@@ -73,11 +75,14 @@ nanoui is used to open and update nano browser uis
   *
   * @return /nanoui new nanoui object
   */
-/datum/nanoui/New(nuser, nsrc_object, nui_key, ntemplate_filename, ntitle = 0, nwidth = 0, nheight = 0, atom/nref = null, datum/nanoui/master_ui = null, datum/topic_state/state = GLOB.default_state)
+/datum/nanoui/New(nuser, nsrc_object, nui_key, ntemplate_filename, ntitle = 0, nwidth = 0, nheight = 0, atom/nref = null, datum/nanoui/master_ui = null, datum/topic_state/state = GLOB.default_state, asset_delivery_mode = null)
 	user = nuser
 	src_object = nsrc_object
 	ui_key = nui_key
 	window_id = "[ui_key]\ref[src_object]"
+	use_asset_v2 = asset_delivery_mode == ASSET_DELIVERY_V2
+	if(use_asset_v2)
+		asset_v2_debug("nanoui constructed ui_key=[ui_key] template=[ntemplate_filename] window=[window_id] src=[src_object]", user?.client)
 
 	src.master_ui = master_ui
 	if(master_ui)
@@ -99,8 +104,6 @@ nanoui is used to open and update nano browser uis
 		ref = nsrc_object
 
 	add_common_assets()
-	var/datum/asset/assets = get_asset_datum(/datum/asset/nanoui)
-	assets.send(user, ntemplate_filename)
 
 //Do not qdel nanouis. Use close() instead.
 /datum/nanoui/Destroy()
@@ -116,6 +119,7 @@ nanoui is used to open and update nano browser uis
   */
 /datum/nanoui/proc/add_common_assets()
 	add_script("libraries.min.js") // A JS file comprising of jQuery, doT.js and jQuery Timer libraries (compressed together)
+	add_script("morphdom.min.js") // morphdom: DOM diffing library to eliminate UI flicker on auto-updates
 	add_script("nano_utility.js") // The NanoUtility JS, this is used to store utility functions.
 	add_script("nano_template.js") // The NanoTemplate JS, this is used to render templates.
 	add_script("nano_state_manager.js") // The NanoStateManager JS, it handles updates from the server and passes data to the current state
@@ -257,7 +261,8 @@ nanoui is used to open and update nano browser uis
   * @return nothing
   */
 /datum/nanoui/proc/add_stylesheet(file)
-	stylesheets.Add(file)
+	if(!(file in stylesheets))
+		stylesheets.Add(file)
 
  /**
   * Add a JavsScript script to this UI
@@ -268,7 +273,8 @@ nanoui is used to open and update nano browser uis
   * @return nothing
   */
 /datum/nanoui/proc/add_script(file)
-	scripts.Add(file)
+	if(!(file in scripts))
+		scripts.Add(file)
 
  /**
   * Add a template for this UI
@@ -282,6 +288,19 @@ nanoui is used to open and update nano browser uis
   */
 /datum/nanoui/proc/add_template(key, filename)
 	templates[key] = filename
+
+/datum/nanoui/proc/get_template_filenames()
+	. = list()
+	for(var/key in templates)
+		var/template_filename = templates[key]
+		if(!(template_filename in .))
+			. += template_filename
+
+/datum/nanoui/proc/prepare_render_assets()
+	add_stylesheet("layout_[layout_key].css")
+	add_template("layout", "layout_[layout_key].tmpl")
+	if (layout_header_key)
+		add_template("layoutHeader", "layout_[layout_header_key].tmpl")
 
  /**
   * Set the layout key for use in the frontend Javascript
@@ -363,30 +382,90 @@ nanoui is used to open and update nano browser uis
   * @return string HTML for the UI
   */
 /datum/nanoui/proc/get_html()
-
-	// before the UI opens, add the layout files based on the layout key
-	add_stylesheet("layout_[layout_key].css")
-	add_template("layout", "layout_[layout_key].tmpl")
-	if (layout_header_key)
-		add_template("layoutHeader", "layout_[layout_header_key].tmpl")
+	prepare_render_assets()
 
 	var/head_content = ""
+	var/list/template_urls = templates
 
-	for (var/filename in scripts)
-		head_content += "<script type='text/javascript' src='[filename]'></script> "
+	if(use_asset_v2)
+		asset_v2_debug("nanoui get_html window=[window_id] scripts=[asset_v2_debug_list(scripts)] styles=[asset_v2_debug_list(stylesheets)] templates=[asset_v2_debug_list(templates)]", user?.client)
+		var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+		for (var/filename in scripts)
+			var/logical_id = asset_registry_v2.ensure_nanoui_filename_registered(filename)
+			if(logical_id)
+				head_content += "<script type='text/javascript' defer src='{{asset:[logical_id]}}'></script> "
+			else
+				head_content += "<script type='text/javascript' defer src='[filename]'></script> "
 
-	for (var/filename in stylesheets)
-		head_content += "<link rel='stylesheet' type='text/css' href='[filename]'> "
+		for (var/filename in stylesheets)
+			var/logical_id = asset_registry_v2.ensure_nanoui_filename_registered(filename)
+			if(logical_id)
+				head_content += "<link rel='stylesheet' type='text/css' href='{{asset:[logical_id]}}'> "
+			else
+				head_content += "<link rel='stylesheet' type='text/css' href='[filename]'> "
+
+		if (length(templates) > 0)
+			template_urls = list()
+			for (var/key in templates)
+				var/template_filename = templates[key]
+				var/logical_id = asset_registry_v2.ensure_nanoui_filename_registered(template_filename)
+				template_urls[key] = logical_id ? asset_registry_v2.resolve_key(logical_id, template_filename) : template_filename
+	else
+		for (var/filename in scripts)
+			head_content += "<script type='text/javascript' defer src='[filename]'></script> "
+
+		for (var/filename in stylesheets)
+			head_content += "<link rel='stylesheet' type='text/css' href='[filename]'> "
 
 	var/template_data_json = "{}" // An empty JSON object
-	if (length(templates) > 0)
-		template_data_json = strip_improper(json_encode(templates))
+	if (length(template_urls) > 0)
+		template_data_json = strip_improper(json_encode(template_urls))
 
 	var/list/send_data = get_send_data(initial_data)
 	var/initial_data_json = replacetext(replacetext(json_encode(send_data), "&#34;", "&amp;#34;"), "'", "&#39;")
 	initial_data_json = strip_improper(initial_data_json);
 
 	var/url_parameters_json = json_encode(list("src" = "\ref[src]"))
+
+	if(use_asset_v2)
+		return rewrite_assets_v2({"
+<!DOCTYPE html>
+<html>
+	<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">
+	<head>
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		[asset_v2_browser_debug_script(window_id, "nanoui:[ui_key]")]
+		<script type='text/javascript'>
+			function receiveUpdateData(jsonString)
+			{
+				// We need both jQuery and NanoStateManager to be able to recieve data
+				// At the moment any data received before those libraries are loaded will be lost
+				if (typeof NanoStateManager != 'undefined' && typeof jQuery != 'undefined')
+				{
+					NanoStateManager.receiveUpdateData(jsonString);
+				}
+				//else
+				//{
+				//	alert('browser.recieveUpdateData failed due to jQuery or NanoStateManager being unavailiable.');
+				//}
+			}
+		</script>
+		[head_content]
+	</head>
+	<body scroll=auto data-template-data='[template_data_json]' data-url-parameters='[url_parameters_json]' data-initial-data='[initial_data_json]'>
+		[ui_loading_shell(title, "Synchronizing templates and terminal controls")]
+		<div id='uiLayout'>
+		</div>
+		<noscript>
+			<div id='uiNoScript'>
+				<h2>JAVASCRIPT REQUIRED</h2>
+				<p>Your Internet Explorer's Javascript is disabled (or broken).<br/>
+				Enable Javascript and then open this UI again.</p>
+			</div>
+		</noscript>
+	</body>
+</html>
+	"})
 
 	return {"
 <!DOCTYPE html>
@@ -412,6 +491,7 @@ nanoui is used to open and update nano browser uis
 		[head_content]
 	</head>
 	<body scroll=auto data-template-data='[template_data_json]' data-url-parameters='[url_parameters_json]' data-initial-data='[initial_data_json]'>
+		[ui_loading_shell(title, "Synchronizing templates and terminal controls")]
 		<div id='uiLayout'>
 		</div>
 		<noscript>
@@ -433,13 +513,16 @@ nanoui is used to open and update nano browser uis
 /datum/nanoui/proc/open()
 	if(!istype(user))
 		stack_trace("Wrong type of nanoui user passed: [user], [user.type]")
+		qdel(src)
 		return
 
 	if(!user?.client)
+		qdel(src)
 		return
 
 	if(!src_object)
 		close()
+		return
 
 	var/window_size = ""
 	if (width && height)
@@ -447,11 +530,55 @@ nanoui is used to open and update nano browser uis
 	if(update_status(0))
 		return // Will be closed by update_status().
 
+	if(use_asset_v2)
+		asset_v2_debug("nanoui open start window=[window_id] title=[asset_v2_debug_value(title)]", user?.client)
+		prepare_render_assets()
+		var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+		if(isnull(asset_registry_v2.ensure_nanoui_ui_verified(user.client, src)))
+			asset_v2_debug("nanoui open abort unverified assets window=[window_id] title=[asset_v2_debug_value(title)]", user?.client)
+			qdel(src)
+			return
+	else
+		prepare_render_assets()
+		var/datum/asset/assets = get_asset_datum(/datum/asset/nanoui)
+		assets.send(user, get_template_filenames())
+
 	show_browser(user, get_html(), "window=[window_id];[window_size][window_options]")
+	if(use_asset_v2)
+		asset_v2_debug("nanoui open browse window=[window_id]", user?.client)
 	winset(user, "mapwindow.map", "focus=true") // return keyboard focus to map
 	on_close_winset()
 	//onclose(user, window_id)
 	SSnano.ui_opened(src)
+
+/datum/nanoui/proc/reload_shell()
+	if(!istype(user) || !user?.client)
+		return
+	if(!src_object)
+		close()
+		return
+
+	var/window_size = ""
+	if (width && height)
+		window_size = "size=[width]x[height];"
+	if(update_status(0))
+		return
+
+	if(use_asset_v2)
+		asset_v2_debug("nanoui reload_shell window=[window_id] title=[asset_v2_debug_value(title)]", user?.client)
+		prepare_render_assets()
+		var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+		if(isnull(asset_registry_v2.ensure_nanoui_ui_verified(user.client, src)))
+			asset_v2_debug("nanoui reload_shell abort unverified assets window=[window_id] title=[asset_v2_debug_value(title)]", user?.client)
+			return
+	else
+		prepare_render_assets()
+		var/datum/asset/assets = get_asset_datum(/datum/asset/nanoui)
+		assets.send(user, get_template_filenames())
+
+	show_browser(user, get_html(), "window=[window_id];[window_size][window_options]")
+	winset(user, "mapwindow.map", "focus=true")
+	on_close_winset()
 
  /**
   * Reinitialise this UI, potentially with a different template and/or initial data

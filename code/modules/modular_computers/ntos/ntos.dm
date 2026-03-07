@@ -77,6 +77,7 @@
 
 /// Handles all cleanup when the system is shut down.
 /datum/extension/interactive/ntos/proc/system_shutdown()
+	set waitfor = FALSE
 	for(var/datum/computer_file/program/P in running_programs)
 		kill_program(P, TRUE)
 
@@ -104,6 +105,7 @@
 
 /// Handles all setup when the system is booted up.
 /datum/extension/interactive/ntos/proc/system_boot()
+	set waitfor = FALSE
 	on = TRUE
 
 	var/obj/item/stock_parts/computer/network_card/network_card = get_component(PART_NETWORK)
@@ -122,6 +124,7 @@
 
 /// Attempts to kill a program.
 /datum/extension/interactive/ntos/proc/kill_program_remote(datum/computer_file/program/P, forced = FALSE, mob/user = null)
+	set waitfor = FALSE
 	if(!P)
 		return
 

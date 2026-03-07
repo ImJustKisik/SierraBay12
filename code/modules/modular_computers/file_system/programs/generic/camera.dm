@@ -41,6 +41,9 @@
 /datum/nano_module/program/camera_monitor
 	name = "Camera Monitoring program"
 	available_to_ai = TRUE
+	sui_interface_name = "CameraMonitor"
+	sui_width = 900
+	sui_height = 800
 	var/obj/machinery/camera/current_camera = null
 	var/current_network = null
 
@@ -50,7 +53,10 @@
 	. = ..()
 
 
-/datum/nano_module/program/camera_monitor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, state = GLOB.default_state)
+/datum/nano_module/program/camera_monitor/ui_interact_sui(mob/user, ui_key = "main", force_open = 1, master_ui = null, datum/topic_state/state = GLOB.default_state)
+	return ..()
+
+/datum/nano_module/program/camera_monitor/sui_data(mob/user)
 	var/list/data = host.initial_data(program)
 
 	data["current_camera"] = current_camera ? current_camera.nano_structure() : null
@@ -70,18 +76,8 @@
 	if(current_network)
 		data["cameras"] = camera_repository.cameras_in_network(current_network)
 
-	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
-	if (!ui)
-		ui = new(user, src, ui_key, "sec_camera.tmpl", "Camera Monitoring", 900, 800, state = state)
-		// ui.auto_update_layout = 1 // Disabled as with suit sensors monitor - breaks the UI map. Re-enable once it's fixed somehow.
-
-		ui.add_template("mapContent", "sec_camera_map_content.tmpl")
-		ui.add_template("mapHeader", "sec_camera_map_header.tmpl")
-		ui.set_initial_data(data)
-		ui.open()
-
-	user.machine = nano_host()
-	user.reset_view(current_camera)
+	// In SUI, we push map visibility as part of the interface state so JS can know whether to frame it.
+	return data
 
 // Intended to be overriden by subtypes to manually add non-station networks to the list.
 /datum/nano_module/program/camera_monitor/proc/modify_networks_list(list/networks)
@@ -94,44 +90,44 @@
 
 	return check_access(user, access_security) || check_access(user, network_access)
 
-/datum/nano_module/program/camera_monitor/Topic(href, href_list)
-	if(..())
-		return 1
-
-	if(href_list["switch_camera"])
-		var/obj/machinery/camera/C = locate(href_list["switch_camera"]) in cameranet.cameras
+/datum/nano_module/program/camera_monitor/sui_act(action, list/params, datum/sui/ui)
+	if(action == "switch_camera")
+		var/obj/machinery/camera/C = locate(params["switch_camera"]) in cameranet.cameras
 		var/datum/extension/interactive/ntos/os = get_extension(nano_host(), /datum/extension/interactive/ntos)
 		if(!C)
-			return
+			return FALSE
 		if(!(current_network in C.network))
-			return
+			return FALSE
 		if(!AreConnectedZLevels(get_z(C), get_z(host)) && !(get_z(C) in GLOB.using_map.admin_levels))
-			to_chat(usr, "Unable to establish a connection.")
-			return
+			to_chat(ui.user, "Unable to establish a connection.")
+			return FALSE
 		if (!os?.get_ntnet_status() && !C.is_helmet_cam)
-			to_chat(usr, "Unable to establish a connection.")
-			return
+			to_chat(ui.user, "Unable to establish a connection.")
+			return FALSE
 		if (C.inoperable(MACHINE_STAT_EMPED))
-			to_chat(usr, "Unable to establish a connection.")
-			return
+			to_chat(ui.user, "Unable to establish a connection.")
+			return FALSE
 
-		switch_to_camera(usr, C)
-		apply_visual(usr) //[SIERRA-ADD] - missing visuals
-		return 1
+		switch_to_camera(ui.user, C)
+		apply_visual(ui.user)
+		ui.set_show_map(TRUE, get_z(C), 500) // Show map embedded in SUI
+		return TRUE
 
-	else if(href_list["switch_network"])
-		// Either security access, or access to the specific camera network's department is required in order to access the network.
-		if(can_access_network(usr, get_camera_access(href_list["switch_network"])))
-			current_network = href_list["switch_network"]
+	if(action == "switch_network")
+		if(can_access_network(ui.user, get_camera_access(params["switch_network"])))
+			current_network = params["switch_network"]
 		else
-			to_chat(usr, "\The [nano_host()] shows an \"Network Access Denied\" error message.")
-		return 1
+			to_chat(ui.user, "\The [nano_host()] shows an \"Network Access Denied\" error message.")
+		return TRUE
 
-	else if(href_list["reset"])
+	if(action == "reset")
 		reset_current()
-		remove_visual(usr) //[SIERRA-ADD] - missing visuals
-		usr.reset_view(current_camera)
-		return 1
+		remove_visual(ui.user)
+		ui.user.reset_view(current_camera)
+		ui.set_show_map(FALSE) // Hide map embedded in SUI
+		return TRUE
+
+	return FALSE
 
 /datum/nano_module/program/camera_monitor/proc/switch_to_camera(mob/user, obj/machinery/camera/C)
 	//don't need to check if the camera works for AI because the AI jumps to the camera location and doesn't actually look through cameras.

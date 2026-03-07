@@ -306,47 +306,82 @@
 
 
 /obj/machinery/vending/interface_interact(mob/living/user)
-	ui_interact(user)
+	ui_interact_sui(user)
 	return TRUE
 
 
 /obj/machinery/vending/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui, force_open = TRUE)
-	user.set_machine(src)
+	return ui_interact_sui(user)
+
+
+/obj/machinery/vending/proc/get_vending_ui_data()
 	var/list/data = list()
+	data["mode"] = !isnull(currently_vending)
+	data["busy"] = !vend_ready
+	data["message"] = status_message
+	data["message_err"] = status_error
+	data["panel"] = panel_open
+	data["speaker"] = shut_up ? FALSE : TRUE
+	data["coin"] = coin ? coin.name : null
+	data["maintenance_available"] = panel_open || coin
+
 	if (currently_vending)
-		data["mode"] = TRUE
 		data["product"] = currently_vending.item_name
 		data["price"] = currently_vending.price
-		data["message_err"] = FALSE
-		data["message"] = status_message
-		data["message_err"] = status_error
+
+	var/list/listed_products = list()
+	for (var/key = 1 to length(product_records))
+		var/datum/stored_items/vending_products/product = product_records[key]
+		if (!(product.category & vendor_flags))
+			continue
+		listed_products.Add(list(list(
+			"key" = key,
+			"name" = product.item_name,
+			"price" = product.price,
+			"color" = product.display_color,
+			"amount" = product.get_amount(),
+			"icon" = get_product_icon_b64(product.item_path)
+		)))
+	data["products"] = listed_products
+	return data
+
+/// Returns a cached base64 data URI for a product type path's icon.
+/obj/machinery/vending/proc/get_product_icon_b64(item_path)
+	if (!item_path)
+		return null
+	var/static/list/icon_cache = list()
+	var/cache_key = "[item_path]"
+	if (icon_cache[cache_key])
+		return icon_cache[cache_key]
+	// Generate icon from the item's type path
+	var/atom/A = item_path
+	var/icon_file = initial(A.icon)
+	var/icon_state_name = initial(A.icon_state)
+	if (!icon_file)
+		return null
+	var/icon/I = icon(icon_file, icon_state_name, SOUTH, 1)
+	if (!I)
+		return null
+	var/b64 = icon2base64(I, cache_key)
+	if (!b64)
+		return null
+	var/data_uri = "data:image/png;base64,[b64]"
+	icon_cache[cache_key] = data_uri
+	return data_uri
+
+
+/obj/machinery/vending/proc/ui_interact_sui(mob/user)
+	if(!user)
+		return
+	user.set_machine(src)
+
+	var/datum/sui/ui = SSnano.try_update_sui(user, src, "main")
+	if(!ui)
+		ui = new /datum/sui(user, src, "VendingMachine", name, 456, 640)
+		ui.set_frameless(TRUE)
+		ui.open(get_vending_ui_data())
 	else
-		data["mode"] = FALSE
-		var/list/listed_products = list()
-		for (var/key = 1 to length(product_records))
-			var/datum/stored_items/vending_products/product = product_records[key]
-			if (!(product.category & vendor_flags))
-				continue
-			listed_products.Add(list(list(
-				"key" = key,
-				"name" = product.item_name,
-				"price" = product.price,
-				"color" = product.display_color,
-				"amount" = product.get_amount()
-			)))
-		data["products"] = listed_products
-	if (coin)
-		data["coin"] = coin.name
-	if (panel_open)
-		data["panel"] = TRUE
-		data["speaker"] = shut_up ? FALSE : TRUE
-	else
-		data["panel"] = FALSE
-	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
-	if (!ui)
-		ui = new(user, src, ui_key, "vending_machine.tmpl", name, 440, 600)
-		ui.set_initial_data(data)
-		ui.open()
+		ui.push_data(get_vending_ui_data())
 
 
 /obj/machinery/vending/OnTopic(mob/user, href_list, datum/topic_state/state)
@@ -389,6 +424,69 @@
 	if (href_list["togglevoice"] && panel_open)
 		shut_up = !shut_up
 		return TOPIC_HANDLED
+
+
+/obj/machinery/vending/sui_act(action, list/params, datum/sui/ui)
+	switch(action)
+		if("remove_coin")
+			if (istype(ui.user, /mob/living/silicon))
+				return FALSE
+			if (!coin)
+				to_chat(ui.user, "There is no coin in this machine.")
+				return FALSE
+			coin.dropInto(loc)
+			if (!ui.user.get_active_hand())
+				ui.user.put_in_hands(coin)
+			to_chat(ui.user, SPAN_NOTICE("You remove \the [coin] from \the [src]"))
+			coin = null
+			UpdateShowPremium(FALSE)
+			return TRUE
+
+		if("vend")
+			if (!vend_ready || currently_vending)
+				return FALSE
+			var/key = text2num(params["vend"])
+			if (!is_valid_index(key, product_records))
+				return FALSE
+			var/datum/stored_items/vending_products/product = product_records[key]
+			if (!istype(product))
+				return FALSE
+			if (!(product.category & vendor_flags))
+				return FALSE
+			if (product.price <= 0)
+				vend(product, ui.user)
+			else if (istype(ui.user, /mob/living/silicon))
+				to_chat(ui.user, SPAN_WARNING("Artificial unit recognized. Purchase canceled."))
+			else
+				currently_vending = product
+				if (!vendor_account || vendor_account.suspended)
+					status_message = "This machine is currently unable to process payments due to problems with the associated account."
+					status_error = TRUE
+				else
+					status_message = "Please swipe a card or insert cash to pay for the item."
+					status_error = FALSE
+			return TRUE
+
+		if("cancelpurchase")
+			currently_vending = null
+			status_message = ""
+			status_error = FALSE
+			return TRUE
+
+		if("togglevoice")
+			if (!panel_open)
+				return FALSE
+			shut_up = !shut_up
+			return TRUE
+
+		if("__close")
+			return FALSE
+
+	return FALSE
+
+
+/obj/machinery/vending/sui_update(mob/user, datum/sui/ui)
+	ui.push_data(get_vending_ui_data())
 
 
 /obj/machinery/vending/get_req_access()

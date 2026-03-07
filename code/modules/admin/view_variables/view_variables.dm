@@ -16,6 +16,7 @@ var/global/list/view_variables_no_assoc = list("verbs", "contents","screen","ima
 		return
 
 	var/static/cookieoffset = rand(1, 9999) //to force cookies to reset after the round.
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
 
 	var/icon/sprite
 	var/atom/A
@@ -23,9 +24,9 @@ var/global/list/view_variables_no_assoc = list("verbs", "contents","screen","ima
 		A = D
 		if(A.icon && A.icon_state)
 			sprite = icon(A.icon, A.icon_state)
-			send_rsc(usr, sprite, "view_vars_sprite.png")
+			asset_registry_v2.ensure_legacy_named_asset(usr, "view_vars_sprite.png", sprite)
 
-	send_rsc(usr,'code/js/view_variables.js', "view_variables.js")
+	asset_registry_v2.ensure_legacy_named_asset(usr, "view_variables.js", 'code/js/view_variables.js')
 
 	var/html = {"
 		<html>
