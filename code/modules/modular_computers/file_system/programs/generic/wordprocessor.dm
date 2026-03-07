@@ -35,109 +35,161 @@
 	if(.)
 		is_edited = FALSE
 
+/datum/computer_file/program/wordprocessor/proc/handle_wordprocessor_action(action, list/params, mob/user)
+	switch(action)
+		if("preview_text")
+			if(!istype(user))
+				return TOPIC_NOACTION
+			show_browser(user,"<HTML><HEAD><TITLE>[open_file]</TITLE></HEAD>[digitalPencode2html(loaded_data)]</BODY></HTML>", "window=[open_file]")
+			return TOPIC_HANDLED
+
+		if("tag_help")
+			if(!istype(user))
+				return TOPIC_NOACTION
+			var/datum/codex_entry/entry = SScodex.get_codex_entry("pen")
+			if(entry)
+				SScodex.present_codex_entry(user, entry)
+			return TOPIC_HANDLED
+
+		if("close_browser")
+			browsing = FALSE
+			return TOPIC_HANDLED
+
+		if("back_to_menu")
+			error = null
+			return TOPIC_HANDLED
+
+		if("load_menu")
+			browsing = TRUE
+			return TOPIC_HANDLED
+
+		if("open_file")
+			var/target_file = params["filename"]
+			if(!target_file)
+				return TOPIC_NOACTION
+			if(is_edited && istype(user))
+				if(alert(user, "Would you like to save your changes first?", null, "Yes", "No") == "Yes")
+					if(!save_file(open_file))
+						error = "I/O error: Unable to save file '[open_file]'."
+						browsing = FALSE
+						return TOPIC_HANDLED
+			browsing = FALSE
+			if(!open_file(target_file))
+				error = "I/O error: Unable to open file '[target_file]'."
+			return TOPIC_HANDLED
+
+		if("new_file")
+			if(is_edited && istype(user))
+				if(alert(user, "Would you like to save your changes first?", null, "Yes", "No") == "Yes")
+					if(!save_file(open_file))
+						error = "I/O error: Unable to save file '[open_file]'."
+						return TOPIC_HANDLED
+			if(!istype(user))
+				return TOPIC_NOACTION
+			var/newname = sanitize(input(user, "Enter file name:", "New File") as text|null)
+			if(!newname)
+				return TOPIC_HANDLED
+			var/datum/computer_file/data/F = create_file(newname)
+			if(!istype(F))
+				error = "I/O error: Unable to create file '[newname]'."
+				return TOPIC_HANDLED
+			open_file = F.filename
+			loaded_data = ""
+			return TOPIC_HANDLED
+
+		if("save_as_file")
+			if(!istype(user))
+				return TOPIC_NOACTION
+			var/newname = sanitize(input(user, "Enter file name:", "Save As") as text|null)
+			if(!newname)
+				return TOPIC_HANDLED
+			var/datum/computer_file/data/F = create_file(newname, loaded_data)
+			if(!istype(F))
+				error = "I/O error: Unable to create file '[newname]'."
+				return TOPIC_HANDLED
+			open_file = F.filename
+			return TOPIC_HANDLED
+
+		if("save_file")
+			if(!open_file)
+				if(!istype(user))
+					return TOPIC_NOACTION
+				open_file = sanitize(input(user, "Enter file name:", "Save As") as text|null)
+				if(!open_file)
+					return TOPIC_HANDLED
+			if(!save_file(open_file))
+				error = "I/O error: Unable to save file '[open_file]'."
+			return TOPIC_HANDLED
+
+		if("edit_file")
+			if(!istype(user))
+				return TOPIC_NOACTION
+			var/oldtext = html_decode(loaded_data)
+			oldtext = replacetext(oldtext, "\[br\]", "\n")
+
+			var/newtext = sanitize(replacetext(input(user, "Editing file '[open_file]'. You may use most tags used in paper formatting:", "Text Editor", oldtext) as message|null, "\n", "\[br\]"), MAX_TEXTFILE_LENGTH)
+			if(!newtext)
+				return TOPIC_HANDLED
+			loaded_data = newtext
+			is_edited = TRUE
+			return TOPIC_HANDLED
+
+		if("print_file")
+			if(!computer.print_paper(digitalPencode2html(loaded_data)))
+				error = "Hardware error: Printer missing or out of paper."
+			return TOPIC_HANDLED
+
+	return TOPIC_NOACTION
+
 /datum/computer_file/program/wordprocessor/Topic(href, href_list)
 	if(..())
 		return TOPIC_HANDLED
 
 	if(href_list["PRG_txtrpeview"])
-		show_browser(usr,"<HTML><HEAD><TITLE>[open_file]</TITLE></HEAD>[digitalPencode2html(loaded_data)]</BODY></HTML>", "window=[open_file]")
-		return TOPIC_HANDLED
+		return handle_wordprocessor_action("preview_text", null, usr)
 
 	if(href_list["PRG_taghelp"])
-		var/datum/codex_entry/entry = SScodex.get_codex_entry("pen")
-		if(entry)
-			SScodex.present_codex_entry(usr, entry)
-		return TOPIC_HANDLED
+		return handle_wordprocessor_action("tag_help", null, usr)
 
 	if(href_list["PRG_closebrowser"])
-		browsing = FALSE
-		return TOPIC_HANDLED
+		return handle_wordprocessor_action("close_browser", null, usr)
 
 	if(href_list["PRG_backtomenu"])
-		error = null
-		return TOPIC_HANDLED
+		return handle_wordprocessor_action("back_to_menu", null, usr)
 
 	if(href_list["PRG_loadmenu"])
-		browsing = TRUE
-		return TOPIC_HANDLED
+		return handle_wordprocessor_action("load_menu", null, usr)
 
 	if(href_list["PRG_openfile"])
-		. = TOPIC_HANDLED
-		if(is_edited)
-			if(alert("Would you like to save your changes first?",,"Yes","No") == "Yes")
-				if(!save_file(open_file))
-					error = "I/O error: Unable to save file '[open_file]'."
-					browsing = FALSE
-					return
-		browsing = FALSE
-		if(!open_file(href_list["PRG_openfile"]))
-			error = "I/O error: Unable to open file '[href_list["PRG_openfile"]]'."
-		return
+		return handle_wordprocessor_action("open_file", list("filename" = href_list["PRG_openfile"]), usr)
 
 	if(href_list["PRG_newfile"])
-		. = TOPIC_HANDLED
-		if(is_edited)
-			if(alert("Would you like to save your changes first?",,"Yes","No") == "Yes")
-				if(!save_file(open_file))
-					error = "I/O error: Unable to save file '[open_file]'."
-					return
-		var/newname = sanitize(input(usr, "Enter file name:", "New File") as text|null)
-		if(!newname)
-			return
-		var/datum/computer_file/data/F = create_file(newname)
-		if(!istype(F))
-			error = "I/O error: Unable to create file '[newname]'."
-			return
-		open_file = F.filename
-		loaded_data = ""
-		return
+		return handle_wordprocessor_action("new_file", null, usr)
 
 	if(href_list["PRG_saveasfile"])
-		. = TOPIC_HANDLED
-		var/newname = sanitize(input(usr, "Enter file name:", "Save As") as text|null)
-		if(!newname)
-			return
-		var/datum/computer_file/data/F = create_file(newname, loaded_data)
-		if(!istype(F))
-			error = "I/O error: Unable to create file '[newname]'."
-			return
-		open_file = F.filename
-		return
+		return handle_wordprocessor_action("save_as_file", null, usr)
 
 	if(href_list["PRG_savefile"])
-		. = TOPIC_HANDLED
-		if(!open_file)
-			open_file = sanitize(input(usr, "Enter file name:", "Save As") as text|null)
-			if(!open_file)
-				return
-		if(!save_file(open_file))
-			error = "I/O error: Unable to save file '[open_file]'."
-		return
+		return handle_wordprocessor_action("save_file", null, usr)
 
 	if(href_list["PRG_editfile"])
-		var/oldtext = html_decode(loaded_data)
-		oldtext = replacetext(oldtext, "\[br\]", "\n")
-
-		var/newtext = sanitize(replacetext(input(usr, "Editing file '[open_file]'. You may use most tags used in paper formatting:", "Text Editor", oldtext) as message|null, "\n", "\[br\]"), MAX_TEXTFILE_LENGTH)
-		if(!newtext)
-			return
-		loaded_data = newtext
-		is_edited = TRUE
-		return TOPIC_HANDLED
+		return handle_wordprocessor_action("edit_file", null, usr)
 
 	if(href_list["PRG_printfile"])
-		. = TOPIC_HANDLED
-		if(!computer.print_paper(digitalPencode2html(loaded_data)))
-			error = "Hardware error: Printer missing or out of paper."
-		return
+		return handle_wordprocessor_action("print_file", null, usr)
 
 /datum/nano_module/program/computer_wordprocessor
 	name = "Word Processor"
+	sui_interface_name = "WordProcessor"
+	sui_width = 575
+	sui_height = 700
 
-/datum/nano_module/program/computer_wordprocessor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/computer_wordprocessor/proc/build_wordprocessor_data(mob/user)
 	var/list/data = host.initial_data(program)
 	var/datum/computer_file/program/wordprocessor/PRG
 	PRG = program
+	if(!istype(PRG))
+		return data
 
 	if(PRG.error)
 		data["error"] = PRG.error
@@ -172,6 +224,19 @@
 	else
 		data["filedata"] = digitalPencode2html(sanitize(PRG.loaded_data, MAX_TEXTFILE_LENGTH, FALSE))
 		data["filename"] = "UNNAMED"
+	return data
+
+/datum/nano_module/program/computer_wordprocessor/sui_data(mob/user)
+	return build_wordprocessor_data(user)
+
+/datum/nano_module/program/computer_wordprocessor/sui_act(action, list/params, datum/sui/ui)
+	var/datum/computer_file/program/wordprocessor/PRG = program
+	if(!istype(PRG))
+		return FALSE
+	return PRG.handle_wordprocessor_action(action, params || list(), ui?.user) != TOPIC_NOACTION
+
+/datum/nano_module/program/computer_wordprocessor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_wordprocessor_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)

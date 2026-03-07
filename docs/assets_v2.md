@@ -40,7 +40,7 @@
   - per-template `.tmpl` from `nano/templates` or `nano/templates/mods`
   - optional map images
 - SUI:
-  - currently relies on implicit preload of NanoUI common assets
+  - uses `browser_shared` + `sui_common` packs
   - `libraries.min.js`, `preact.min.js`, `preact-hooks.min.js`
   - `sui.js`, `sui_components.js`
   - `shared.css`, `icons.css`
@@ -90,6 +90,7 @@ Initial pack layout:
 - `core_bootstrap`
 - `login_branding`
 - `goonchat`
+- `browser_shared`
 - `nanoui_common`
 - `sui_common`
 - `rnd_icons_page_<n>`
@@ -115,7 +116,7 @@ Implications:
 
 1. Server registers assets in `asset_registry_v2` under stable `logical_id`s.
 2. Each asset resolves to a content-addressed `key` like `asset.<sha1>.<ext>`.
-3. Features define explicit packs such as `nanoui_common`, `sui_common`, `login_branding`, or feature-specific paged packs.
+3. Features define explicit packs such as `browser_shared`, `nanoui_common`, `sui_common`, `login_branding`, or feature-specific paged packs.
 4. When a UI or feature opens, it calls `ensure_pack()` / `ensure_asset()` for async paths, or the verified variants for UI-critical windows that must not race first open.
 5. HTML is rewritten through `{{asset:logical_id}}` or `ASSET("logical_id")`, so frontend markup does not need to know final cache keys.
 6. Client-local v2 state tracks which assets, keys, and packs were already sent, preventing duplicate sends.
@@ -129,7 +130,7 @@ Implications:
 
 ### Current implemented vertical slices
 
-- `SUI` requests `sui_common` and interface-specific JS with verified delivery before window open.
+- `SUI` requests `sui_common` (which now depends on `browser_shared`, not `nanoui_common`) and interface-specific JS with verified delivery before window open.
 - `vending_machine.tmpl` is the first real NanoUI screen using the v2 path.
 - Raw `nano/images/*` assets are still exposed under legacy filenames so existing CSS `url(...)` references remain valid during migration.
 - Legacy login, most NanoUI screens, goonchat, and generated icon-heavy paths are still on the old system or mixed mode.
@@ -254,6 +255,7 @@ Reasoning:
 - NanoUI should live in `nanoui_common`.
 - SUI should live in `sui_common`.
 - Generic browser assets should move to their own browser pack.
+- Shared browser runtime has been split into `browser_shared` and is now consumed by both NanoUI and SUI.
 - Connect-time bootstrap must not be treated as authoritative for UI correctness; windows that cannot tolerate a first-open race should verify their own assets before `browse()`.
 
 Transition note:
@@ -262,7 +264,7 @@ Transition note:
 
 ## SUI Compatibility Layer Notes
 
-`ASSET_PACK_SUI_COMMON` continues to be the single required SUI runtime pack.
+`ASSET_PACK_SUI_COMMON` continues to be the SUI runtime pack, now with explicit dependency on `ASSET_PACK_BROWSER_SHARED` (instead of `ASSET_PACK_NANOUI_COMMON`).
 No new files were added for iteration 2: compatibility APIs and map abstractions were integrated into existing assets:
 
 - `nano/js/sui.js`
@@ -272,4 +274,4 @@ No new files were added for iteration 2: compatibility APIs and map abstractions
   - `SUI.ActionLink` (NanoUI-like replacement for link helper patterns)
   - `SUI.MapPanel` (standard map placeholder/toolbar shell for DM-managed map view)
 
-Because these changes are inside already-registered logical IDs (`sui.js.core`, `sui.js.components`), existing pack wiring in `sui_common` remains unchanged.
+Because these changes are inside already-registered logical IDs (`sui.js.core`, `sui.js.components`), only pack dependency wiring changed in iteration 3 (`sui_common -> browser_shared`).

@@ -451,6 +451,50 @@ JS:
 5. Use SUI compatibility helpers (`SUI.formatNumber`, `SUI.fixed`, `SUI.round`, `SUI.capitalizeFirstLetter`) for repeated formatting logic.
 6. Verify: open, update tick, close/reopen, out-of-range status, and map on/off transitions.
 
+## Migration Status (Iteration 3)
+
+### Migrated
+
+- Standalone:
+  - `VendingMachine` (`code/game/machinery/vending/_vending.dm` + `nano/js/sui_vendingmachine.js`)
+- Modular computers / NTOS:
+  - `ShipSensors` (`ship/sensors.dm`)
+  - `CrewManifest` (`generic/crew_manifest.dm`)
+  - `CameraMonitor` (`generic/camera.dm`)
+  - `WordProcessor` (`generic/wordprocessor.dm`) - migrated in iteration 3
+  - `NTNetDownloader` (`generic/ntdownloader.dm`) - migrated in iteration 3
+  - `NTTransfer` (`generic/nttransfer.dm`) - migrated in iteration 3
+  - `Newscast` (`generic/news.dm`) - migrated in iteration 3
+
+### Pending (priority/high-traffic first)
+
+- NTOS utilities/office:
+  - `File Manager` (`generic/file_browser.dm`)
+  - `Email Client` (`generic/email_client.dm`)
+  - `Supply` (`generic/supply.dm`)
+  - `Records` (`generic/records.dm`)
+  - `NTNRC Client` (`generic/ntnrc_client.dm`)
+- Monitoring/engineering:
+  - `Power Monitor`, `Alarm Monitor`, `Atmos Control`, `Supermatter Monitor`, `RCON`, `Shields Monitor`
+- Other NanoUI-heavy programs:
+  - `Deck Management`, `Docks`, `Scanner`, `Library`, `Reports`, security/antag modules
+
+### Blockers / Risks
+
+- Legacy workflows with multiple modal `input()/alert()` calls (especially file/document tools) can regress if action parity is incomplete.
+- Map-heavy and template-composed UIs (`mapHeader/mapContent`) still require careful DM-side `set_show_map()` parity validation.
+- Some old modules carry fragile Topic/href flows; migration should keep a shared action handler used by both NanoUI and SUI to avoid drift.
+- Asset correctness on first-open depends on verified packs; missing interface JS should hard-fail early (already enforced in `sui.dm`).
+
+### Definition Of Done for full NanoUI cutover
+
+1. Every high-traffic player-facing UI has `sui_data/sui_act` and a shipped `nano/js/sui_<interface>.js`.
+2. `nanoui_common` is no longer required for any SUI code path (only shared/browser pack deps remain).
+3. SUI smoke/parity tests cover lifecycle, roundtrip actions, and status gating, and migrated interfaces have regression checks.
+4. Unmigrated NanoUI windows are explicitly tracked, with owners and target iteration.
+5. Server config/feature flag exists to disable NanoUI path in staging and complete one full playtest cycle without functional regressions.
+6. Legacy `.tmpl` loading for migrated interfaces is removed from runtime paths.
+
 Typical mistakes:
 
 - Using old href-style params directly instead of `act("action", params)`.

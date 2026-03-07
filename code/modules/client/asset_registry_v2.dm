@@ -8,6 +8,7 @@
 #define ASSET_PACK_CORE_BOOTSTRAP "core_bootstrap"
 #define ASSET_PACK_LOGIN_BRANDING "login_branding"
 #define ASSET_PACK_GOONCHAT "goonchat"
+#define ASSET_PACK_BROWSER_SHARED "browser_shared"
 #define ASSET_PACK_NANOUI_COMMON "nanoui_common"
 #define ASSET_PACK_SUI_COMMON "sui_common"
 
@@ -1076,8 +1077,14 @@
 		"mods.lobbyscreen.fontawesome.fa_brands_400_eot",
 		"mods.lobbyscreen.fontawesome.fa_brands_400_woff"
 	))
-	var/list/nanoui_common_assets = list(
+	var/list/browser_shared_assets = list(
 		"nano.js.libraries_min",
+		"nano.css.shared",
+		"nano.css.icons"
+	)
+	define_pack(ASSET_PACK_BROWSER_SHARED, browser_shared_assets)
+
+	var/list/nanoui_common_assets = list(
 		"nano.js.morphdom_min",
 		"nano.js.nano_utility",
 		"nano.js.nano_template",
@@ -1085,20 +1092,20 @@
 		"nano.js.nano_state",
 		"nano.js.nano_state_default",
 		"nano.js.nano_base_callbacks",
-		"nano.js.nano_base_helpers",
-		"nano.css.shared",
-		"nano.css.icons"
+		"nano.js.nano_base_helpers"
 	)
 	add_legacy_assets_from_dir("nano/images/", nanoui_common_assets)
 	add_legacy_assets_from_dir("nano/images/status_icons/", nanoui_common_assets)
 	add_legacy_assets_from_dir("nano/images/modular_computers/", nanoui_common_assets)
-	define_pack(ASSET_PACK_NANOUI_COMMON, nanoui_common_assets)
+	define_pack(ASSET_PACK_NANOUI_COMMON, nanoui_common_assets, list(
+		ASSET_PACK_BROWSER_SHARED
+	))
 	define_pack(ASSET_PACK_SUI_COMMON, list(
 		"sui.js.preact_min",
 		"sui.js.preact_hooks_min",
 		"sui.js.core",
 		"sui.js.components"
 	), list(
-		ASSET_PACK_NANOUI_COMMON
+		ASSET_PACK_BROWSER_SHARED
 	))
 	asset_v2_debug("register_defaults complete")

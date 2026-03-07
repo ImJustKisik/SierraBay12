@@ -110,38 +110,63 @@
 	download_netspeed = computer.get_ntnet_speed(computer.get_ntnet_status())
 	download_completion += download_netspeed
 
+/datum/computer_file/program/ntnetdownload/proc/get_download_skill(mob/user)
+	if(istype(user))
+		return user.get_skill_value(SKILL_COMPUTER)
+	return SKILL_MIN
+
+/datum/computer_file/program/ntnetdownload/proc/handle_download_action(action, list/params, mob/user)
+	switch(action)
+		if("download_file")
+			var/filename = params["filename"]
+			if(!filename)
+				return TOPIC_NOACTION
+			var/skill = get_download_skill(user)
+			if(!downloaded_file)
+				begin_file_download(filename, skill)
+			else if(check_file_download(filename) && !downloads_queue.Find(filename) && downloaded_file.filename != filename)
+				downloads_queue[filename] = skill
+			return TOPIC_HANDLED
+
+		if("remove_queued")
+			var/queued_filename = params["filename"]
+			if(!queued_filename)
+				return TOPIC_NOACTION
+			downloads_queue.Remove(queued_filename)
+			return TOPIC_HANDLED
+
+		if("reset_error")
+			if(downloaderror)
+				download_completion = 0
+				download_netspeed = 0
+				downloaded_file = null
+				downloaderror = ""
+			return TOPIC_HANDLED
+
+	return TOPIC_NOACTION
+
 /datum/computer_file/program/ntnetdownload/Topic(href, href_list)
 	if(..())
 		return TOPIC_HANDLED
 	if(href_list["PRG_downloadfile"])
-		if(!downloaded_file)
-			begin_file_download(href_list["PRG_downloadfile"], usr.get_skill_value(SKILL_COMPUTER))
-		else if(check_file_download(href_list["PRG_downloadfile"]) && !downloads_queue.Find(href_list["PRG_downloadfile"]) && downloaded_file.filename != href_list["PRG_downloadfile"])
-			downloads_queue[href_list["PRG_downloadfile"]] = usr.get_skill_value(SKILL_COMPUTER)
-		return TOPIC_HANDLED
+		return handle_download_action("download_file", list("filename" = href_list["PRG_downloadfile"]), usr)
 	if(href_list["PRG_removequeued"])
-		downloads_queue.Remove(href_list["PRG_removequeued"])
-		return TOPIC_HANDLED
+		return handle_download_action("remove_queued", list("filename" = href_list["PRG_removequeued"]), usr)
 	if(href_list["PRG_reseterror"])
-		if(downloaderror)
-			download_completion = 0
-			download_netspeed = 0
-			downloaded_file = null
-			downloaderror = ""
-		return TOPIC_HANDLED
+		return handle_download_action("reset_error", null, usr)
 	return TOPIC_NOACTION
 
 /datum/nano_module/program/computer_ntnetdownload
 	name = "Network Downloader"
+	sui_interface_name = "NTNetDownloader"
+	sui_width = 575
+	sui_height = 700
 
-/datum/nano_module/program/computer_ntnetdownload/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
-	var/list/data = list()
+/datum/nano_module/program/computer_ntnetdownload/proc/build_download_data(mob/user)
+	var/list/data = host.initial_data(program)
 	var/datum/computer_file/program/ntnetdownload/prog = program
-	// For now limited to execution by the downloader program
 	if(!prog || !istype(prog))
-		return
-	if(program)
-		data = program.get_header_data()
+		return data
 
 	// This IF cuts on data transferred to client, so i guess it's worth it.
 	if(prog.downloaderror) // Download errored. Wait until user resets the program.
@@ -195,6 +220,19 @@
 		for(var/item in prog.downloads_queue)
 			queue += item
 		data["downloads_queue"] = queue
+	return data
+
+/datum/nano_module/program/computer_ntnetdownload/sui_data(mob/user)
+	return build_download_data(user)
+
+/datum/nano_module/program/computer_ntnetdownload/sui_act(action, list/params, datum/sui/ui)
+	var/datum/computer_file/program/ntnetdownload/prog = program
+	if(!istype(prog))
+		return FALSE
+	return prog.handle_download_action(action, params || list(), ui?.user) != TOPIC_NOACTION
+
+/datum/nano_module/program/computer_ntnetdownload/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_download_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)

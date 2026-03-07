@@ -15,6 +15,9 @@
 
 /datum/nano_module/program/newscast
 	name = "Newscast"
+	sui_interface_name = "Newscast"
+	sui_width = 450
+	sui_height = 600
 	var/prog_state = NEWSCAST_HOME
 	var/notifs_enabled = TRUE
 	var/datum/feed_channel/active_channel
@@ -31,44 +34,68 @@
 		LAZYREMOVE(connected_group.news_programs, src)
 	. = ..()
 
+/datum/nano_module/program/newscast/proc/handle_newscast_action(action, list/params, mob/user)
+	switch(action)
+		if("view_channel")
+			if(!connected_group)
+				return FALSE
+			// We cache a byond text ref of the selected channel, and use it here to get a proper DM pointer to that channel
+			var/datum/feed_channel/new_feed = locate(params["channel_ref"]) in connected_group.network_channels
+			if (istype(new_feed))
+				active_channel = new_feed // and then if it's valid, it becomes our new active channel
+				prog_state = NEWSCAST_VIEW_CHANNEL
+			return TRUE
+
+		if("view_photo")
+			if(!active_channel || !istype(user))
+				return FALSE
+			var/datum/feed_message/story = locate(params["story_ref"]) in active_channel.messages
+			if (istype(story) && story.img)
+				send_rsc(user, story.img, "tmp_photo.png")
+				var/output = "<html><head><title>photo - [story.author]</title></head>"
+				output += "<body style='overflow:hidden; margin:0; text-align:center'>"
+				output += "<img src='tmp_photo.png' width='192' style='-ms-interpolation-mode:nearest-neighbor;image-rendering:pixelated;' />"
+				output += "</body></html>"
+				show_browser(user, output, "window=book; size=192x192]")
+			return TRUE
+
+		if("toggle_notifs")
+			notifs_enabled = !notifs_enabled
+			return TRUE
+
+		if("return_to_home")
+			active_channel = null
+			prog_state = NEWSCAST_HOME
+			return TRUE
+
+	return FALSE
+
 /datum/nano_module/program/newscast/Topic(href, href_list)
 	if(..())
 		return TRUE
 
 	if (href_list["view_channel"])
-		// We cache a byond text ref of the selected channel, and use it here to get a proper DM pointer to that channel
-		var/datum/feed_channel/new_feed = locate(href_list["view_channel"]) in connected_group.network_channels
-		if (istype(new_feed))
-			active_channel = new_feed // and then if it's valid, it becomes our new active channel
-			prog_state = NEWSCAST_VIEW_CHANNEL
-		return TRUE
+		return handle_newscast_action("view_channel", list("channel_ref" = href_list["view_channel"]), usr)
 
 	else if (href_list["view_photo"])
-		var/datum/feed_message/story = locate(href_list["view_photo"]) in active_channel.messages
-		if (istype(story) && story.img)
-			send_rsc(usr, story.img, "tmp_photo.png")
-			var/output = "<html><head><title>photo - [story.author]</title></head>"
-			output += "<body style='overflow:hidden; margin:0; text-align:center'>"
-			output += "<img src='tmp_photo.png' width='192' style='-ms-interpolation-mode:nearest-neighbor;image-rendering:pixelated;' />"
-			output += "</body></html>"
-			show_browser(usr, output, "window=book; size=192x192]")
-		return TRUE
+		return handle_newscast_action("view_photo", list("story_ref" = href_list["view_photo"]), usr)
 
 	else if (href_list["toggle_notifs"])
-		notifs_enabled = !notifs_enabled
-		return TRUE
+		return handle_newscast_action("toggle_notifs", null, usr)
 
 	else if (href_list["return_to_home"])
-		active_channel = null
-		prog_state = NEWSCAST_HOME
-		return TRUE
+		return handle_newscast_action("return_to_home", null, usr)
 
 	return FALSE
 
-/datum/nano_module/program/newscast/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, state = GLOB.default_state)
+/datum/nano_module/program/newscast/proc/build_newscast_data(mob/user)
 	var/list/data = host.initial_data(program)
 
 	var/datum/computer_file/program/newscast/prog = program
+	if(!istype(prog) || !prog.computer)
+		data["has_network"] = FALSE
+		return data
+
 	var/turf/T = get_turf(prog.computer.get_physical_host())
 	if (!connected_group) // Look for a network connected to these z-levels
 		for (var/datum/feed_network/G in news_network)
@@ -124,6 +151,16 @@
 					story["photo_dat"] = "<img src='[resource_name]' width='180'><br>"
 				story["story_ref"] = "\ref[message]"
 				data["active_stories"] += list(story)
+	return data
+
+/datum/nano_module/program/newscast/sui_data(mob/user)
+	return build_newscast_data(user)
+
+/datum/nano_module/program/newscast/sui_act(action, list/params, datum/sui/ui)
+	return handle_newscast_action(action, params || list(), ui?.user)
+
+/datum/nano_module/program/newscast/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, state = GLOB.default_state)
+	var/list/data = build_newscast_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)

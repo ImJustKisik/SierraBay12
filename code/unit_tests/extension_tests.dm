@@ -409,6 +409,9 @@
 	is_auto_updating = nstate
 	return
 
+/datum/sui/unit_test_sui_mock/check_status()
+	return
+
 /datum/sui/unit_test_sui_mock/close()
 	close_count++
 	is_open = FALSE
@@ -418,3 +421,219 @@
 	is_open = FALSE
 	is_closing = TRUE
 	return ..()
+
+/datum/unit_test/sui_close_user_sui_uis_shall_close_registered_windows
+	name = "SUI - close_user_sui_uis shall close registered windows"
+
+/datum/unit_test/sui_close_user_sui_uis_shall_close_registered_windows/start_test()
+	var/atom/movable/unit_test_sui_roundtrip_source/source = new()
+	var/mob/fake_mob/user = new()
+	var/datum/sui/unit_test_sui_mock/main_ui = new(user, source, "RoundtripMain", "Roundtrip Main")
+	var/datum/sui/unit_test_sui_mock/aux_ui = new(user, source, "RoundtripAux", "Roundtrip Aux", nui_key = "aux")
+	main_ui.is_open = TRUE
+	aux_ui.is_open = TRUE
+
+	var/src_key = "\ref[source]"
+	SSnano.open_sui_uis[src_key] = list(
+		"main" = list(main_ui),
+		"aux" = list(aux_ui)
+	)
+
+	var/closed = SSnano.close_user_sui_uis(user, source)
+	var/number_of_failures = 0
+	if(closed != 2)
+		log_bad("Expected close_user_sui_uis to close 2 windows, got [closed].")
+		number_of_failures++
+	if(main_ui.close_count != 1)
+		log_bad("Expected main UI close_count 1, got [main_ui.close_count].")
+		number_of_failures++
+	if(aux_ui.close_count != 1)
+		log_bad("Expected aux UI close_count 1, got [aux_ui.close_count].")
+		number_of_failures++
+
+	SSnano.open_sui_uis -= src_key
+	qdel(main_ui)
+	qdel(aux_ui)
+	qdel(user)
+	qdel(source)
+
+	if(number_of_failures)
+		fail("[number_of_failures] failed assertion\s.")
+	else
+		pass("All assertions passed.")
+	return TRUE
+
+/datum/unit_test/sui_action_roundtrip_shall_push_update
+	name = "SUI - handled sui_act shall roundtrip into ui update"
+
+/datum/unit_test/sui_action_roundtrip_shall_push_update/start_test()
+	var/atom/movable/unit_test_sui_roundtrip_source/source = new()
+	var/mob/fake_mob/user = new()
+	var/datum/sui/unit_test_sui_mock/ui = new(user, source, "Roundtrip", "Roundtrip")
+	ui.is_open = TRUE
+	ui.status = STATUS_INTERACTIVE
+
+	var/src_key = "\ref[source]"
+	SSnano.open_sui_uis[src_key] = list("main" = list(ui))
+
+	if(source.sui_act("toggle", list(), ui))
+		SSnano.update_sui_uis(source)
+
+	var/number_of_failures = 0
+	if(source.last_action != "toggle")
+		log_bad("Expected source to record action 'toggle', got [source.last_action].")
+		number_of_failures++
+	if(!source.state_on)
+		log_bad("Expected source state to become TRUE after toggle action.")
+		number_of_failures++
+	if(source.sui_update_calls != 1)
+		log_bad("Expected sui_update to run once, got [source.sui_update_calls].")
+		number_of_failures++
+	if(ui.push_count != 1)
+		log_bad("Expected UI push_count 1 after update roundtrip, got [ui.push_count].")
+		number_of_failures++
+	if(!ui.last_push_data["state_on"])
+		log_bad("Expected pushed data to include state_on=TRUE.")
+		number_of_failures++
+
+	SSnano.open_sui_uis -= src_key
+	qdel(ui)
+	qdel(user)
+	qdel(source)
+
+	if(number_of_failures)
+		fail("[number_of_failures] failed assertion\s.")
+	else
+		pass("All assertions passed.")
+	return TRUE
+
+/datum/unit_test/sui_status_gating_shall_follow_effective_status
+	name = "SUI - status gating shall transition interactive/update/disabled and close"
+
+/datum/unit_test/sui_status_gating_shall_follow_effective_status/start_test()
+	var/atom/movable/unit_test_sui_status_host/host = new()
+	var/mob/fake_mob/user = new()
+	var/datum/sui/unit_test_status_probe/ui = new(user, host, "StatusProbe", "Status Probe")
+	ui.is_open = TRUE
+	ui.status = STATUS_INTERACTIVE
+
+	host.current_status = STATUS_INTERACTIVE
+	ui.check_status()
+
+	host.current_status = STATUS_UPDATE
+	ui.check_status()
+
+	host.current_status = STATUS_DISABLED
+	ui.check_status()
+
+	host.current_status = STATUS_CLOSE
+	ui.check_status()
+
+	var/number_of_failures = 0
+	if(ui.status != STATUS_DISABLED)
+		log_bad("Expected final non-close status to be STATUS_DISABLED, got [ui.status].")
+		number_of_failures++
+	if(ui.config_update_calls != 2)
+		log_bad("Expected two config updates (interactive->update, update->disabled), got [ui.config_update_calls].")
+		number_of_failures++
+	if(ui.close_calls != 1)
+		log_bad("Expected close() to be called exactly once on STATUS_CLOSE, got [ui.close_calls].")
+		number_of_failures++
+
+	qdel(ui)
+	qdel(user)
+	qdel(host)
+
+	if(number_of_failures)
+		fail("[number_of_failures] failed assertion\s.")
+	else
+		pass("All assertions passed.")
+	return TRUE
+
+/datum/unit_test/sui_migrated_interfaces_shall_have_assets_and_flags
+	name = "SUI - migrated interfaces shall declare sui_interface_name and register assets"
+
+/datum/unit_test/sui_migrated_interfaces_shall_have_assets_and_flags/start_test()
+	var/singleton/asset_registry_v2/registry = GET_SINGLETON(/singleton/asset_registry_v2)
+	var/datum/unit_test_sui_host/host = new()
+	var/number_of_failures = 0
+	var/list/migrated = list(
+		list("interface" = "WordProcessor", "module" = /datum/nano_module/program/computer_wordprocessor),
+		list("interface" = "NTNetDownloader", "module" = /datum/nano_module/program/computer_ntnetdownload),
+		list("interface" = "NTTransfer", "module" = /datum/nano_module/program/computer_nttransfer),
+		list("interface" = "Newscast", "module" = /datum/nano_module/program/newscast)
+	)
+
+	for(var/list/entry in migrated)
+		var/interface_name = entry["interface"]
+		var/module_type = entry["module"]
+		var/datum/nano_module/program/module = new module_type(host, null, null)
+		if(module.sui_interface_name != interface_name)
+			log_bad("Expected [module_type] sui_interface_name='[interface_name]', got '[module.sui_interface_name]'.")
+			number_of_failures++
+		var/logical_id = registry.ensure_sui_interface_registered(interface_name)
+		if(!logical_id)
+			log_bad("Expected interface asset for '[interface_name]' to be registerable.")
+			number_of_failures++
+		qdel(module)
+
+	var/datum/nano_module/program/supply/unmigrated = new(host, null, null)
+	if(unmigrated.sui_interface_name)
+		log_bad("Expected unmigrated /datum/nano_module/program/supply to remain on NanoUI path (no sui_interface_name).")
+		number_of_failures++
+	qdel(unmigrated)
+	qdel(host)
+
+	if(number_of_failures)
+		fail("[number_of_failures] failed assertion\s.")
+	else
+		pass("All assertions passed.")
+	return TRUE
+
+/atom/movable/unit_test_sui_roundtrip_source
+	var/state_on = FALSE
+	var/last_action
+	var/sui_update_calls = 0
+
+/atom/movable/unit_test_sui_roundtrip_source/nano_host()
+	return src
+
+/atom/movable/unit_test_sui_roundtrip_source/CanUseTopic(mob/user, datum/topic_state/state = GLOB.default_state)
+	return STATUS_INTERACTIVE
+
+/atom/movable/unit_test_sui_roundtrip_source/sui_act(action, list/params, datum/sui/ui)
+	last_action = action
+	if(action == "toggle")
+		state_on = !state_on
+		return TRUE
+	return FALSE
+
+/atom/movable/unit_test_sui_roundtrip_source/sui_update(mob/user, datum/sui/ui)
+	sui_update_calls++
+	ui.push_data(list(
+		"state_on" = state_on,
+		"updates" = sui_update_calls
+	))
+
+/atom/movable/unit_test_sui_status_host
+	var/current_status = STATUS_INTERACTIVE
+
+/atom/movable/unit_test_sui_status_host/nano_host()
+	return src
+
+/atom/movable/unit_test_sui_status_host/CanUseTopic(mob/user, datum/topic_state/state = GLOB.default_state)
+	return current_status
+
+/datum/sui/unit_test_status_probe
+	var/config_update_calls = 0
+	var/close_calls = 0
+
+/datum/sui/unit_test_status_probe/send_config_update()
+	config_update_calls++
+	return
+
+/datum/sui/unit_test_status_probe/close()
+	close_calls++
+	is_open = FALSE
+	is_closing = TRUE
+	return
