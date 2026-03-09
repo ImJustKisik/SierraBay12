@@ -15,6 +15,9 @@
 /datum/nano_module/program/shields_monitor
 	name = "Shields monitor"
 	available_to_ai = TRUE
+	sui_interface_name = "ShieldsMonitor"
+	sui_width = 650
+	sui_height = 580
 	var/obj/machinery/power/shield_generator/active = null
 
 /datum/nano_module/program/shields_monitor/Destroy()
@@ -33,7 +36,7 @@
 		deselect_shield()
 	return shields
 
-/datum/nano_module/program/shields_monitor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/shields_monitor/proc/build_shields_data(mob/user)
 	var/list/data = host.initial_data(program)
 
 	if (active)
@@ -75,6 +78,36 @@
 				"area" = A.name))
 			shields_info.Add(temp)
 		data["shields"] = shields_info
+	return data
+
+/datum/nano_module/program/shields_monitor/sui_data(mob/user)
+	return build_shields_data(user)
+
+/datum/nano_module/program/shields_monitor/proc/select_shield(shield_ref)
+	var/list/shields = get_shields()
+	var/obj/machinery/power/shield_generator/S = locate(shield_ref) in shields
+	if(S)
+		deselect_shield()
+		GLOB.destroyed_event.register(S, src, TYPE_PROC_REF(/datum/nano_module/program/shields_monitor, deselect_shield))
+		active = S
+	return TRUE
+
+/datum/nano_module/program/shields_monitor/proc/clear_selected_shield()
+	deselect_shield()
+	return TRUE
+
+/datum/nano_module/program/shields_monitor/sui_act(action, list/params, datum/sui/ui)
+	if(action == "refresh")
+		get_shields()
+		return TRUE
+	if(action == "clear")
+		return clear_selected_shield()
+	if(action == "select_shield")
+		return select_shield(params["shield"])
+	return FALSE
+
+/datum/nano_module/program/shields_monitor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_shields_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
@@ -92,15 +125,10 @@
 		get_shields()
 		return 1
 	if( href_list["return"] )
-		deselect_shield()
+		clear_selected_shield()
 		return 1
 	if( href_list["ref"] )
-		var/list/shields = get_shields()
-		var/obj/machinery/power/shield_generator/S = locate(href_list["ref"]) in shields
-		if(S)
-			deselect_shield()
-			GLOB.destroyed_event.register(S, src, TYPE_PROC_REF(/datum/nano_module/program/shields_monitor, deselect_shield))
-			active = S
+		select_shield(href_list["ref"])
 		return 1
 
 /datum/nano_module/program/shields_monitor/proc/deselect_shield(source)

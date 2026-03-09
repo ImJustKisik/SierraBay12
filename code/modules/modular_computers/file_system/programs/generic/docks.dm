@@ -22,6 +22,9 @@
 /datum/nano_module/program/docking
 	name = "Docking Control program"
 	available_to_ai = TRUE
+	sui_interface_name = "Docking"
+	sui_width = 600
+	sui_height = 450
 	var/list/docking_controllers = list() //list of tags
 
 /datum/nano_module/program/docking/New(datum/host, topic_manager)
@@ -44,7 +47,7 @@
 				continue
 			docking_controllers += D.program.id_tag
 
-/datum/nano_module/program/docking/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, state = GLOB.default_state)
+/datum/nano_module/program/docking/proc/build_docking_data(mob/user)
 	var/list/data = host.initial_data(program)
 	var/list/docks = list()
 	for(var/docktag in docking_controllers)
@@ -61,6 +64,39 @@
 				"codes" = P.docking_codes ? P.docking_codes : "Unset"
 				)))
 	data["docks"] = docks
+	return data
+
+/datum/nano_module/program/docking/sui_data(mob/user)
+	return build_docking_data(user)
+
+/datum/nano_module/program/docking/proc/prompt_edit_code(mob/user, tag, datum/topic_state/state = null)
+	var/datum/computer/file/embedded_program/docking/P = SSshuttle.docking_registry[tag]
+	if(P)
+		var/newcode = input(user, "Input new docking codes", "Docking codes", P.docking_codes) as text|null
+		if(state && !CanInteract(user, state))
+			return FALSE
+		if(newcode)
+			P.docking_codes = uppertext(newcode)
+	return TRUE
+
+/datum/nano_module/program/docking/proc/issue_dock_command(tag, command)
+	var/datum/computer/file/embedded_program/docking/P = SSshuttle.docking_registry[tag]
+	if(P)
+		P.receive_user_command(command)
+	return TRUE
+
+/datum/nano_module/program/docking/sui_act(action, list/params, datum/sui/ui)
+	if(action == "edit_code")
+		return prompt_edit_code(ui?.user, params["tag"], ui?.state)
+	if(action == "dock")
+		return issue_dock_command(params["tag"], "dock")
+	if(action == "undock")
+		return issue_dock_command(params["tag"], "undock")
+	return FALSE
+
+/datum/nano_module/program/docking/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, state = GLOB.default_state)
+	var/list/data = build_docking_data(user)
+
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
 		ui = new(user, src, ui_key, "docking.tmpl", name, 600, 450, state = state)
@@ -72,21 +108,11 @@
 	if(..())
 		return 1
 	if(istext(href_list["edit_code"]))
-		var/datum/computer/file/embedded_program/docking/P = SSshuttle.docking_registry[href_list["edit_code"]]
-		if(P)
-			var/newcode = input("Input new docking codes", "Docking codes", P.docking_codes) as text|null
-			if(!CanInteract(usr,state))
-				return
-			if (newcode)
-				P.docking_codes = uppertext(newcode)
+		prompt_edit_code(usr, href_list["edit_code"], state)
 		return 1
 	if(istext(href_list["dock"]))
-		var/datum/computer/file/embedded_program/docking/P = SSshuttle.docking_registry[href_list["dock"]]
-		if(P)
-			P.receive_user_command("dock")
+		issue_dock_command(href_list["dock"], "dock")
 		return 1
 	if(istext(href_list["undock"]))
-		var/datum/computer/file/embedded_program/docking/P = SSshuttle.docking_registry[href_list["undock"]]
-		if(P)
-			P.receive_user_command("undock")
+		issue_dock_command(href_list["undock"], "undock")
 		return 1

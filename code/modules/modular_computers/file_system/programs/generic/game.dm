@@ -46,6 +46,9 @@
 // and should generally not be used, as such nano modules are hard to use on other places.
 /datum/nano_module/program/arcade_classic
 	name = "Classic Arcade"
+	sui_interface_name = "ArcadeClassic"
+	sui_width = 700
+	sui_height = 600
 	available_to_ai = TRUE
 	var/player_mana			// Various variables specific to the nano module. In this case, the nano module is a simple arcade game, so the variables store health and other stats.
 	var/player_health
@@ -61,9 +64,8 @@
 
 // ui_interact handles transfer of data to NanoUI. Keep in mind that data you pass from here is actually sent to the client. In other words, don't send anything you don't want a client
 // to see, and don't send unnecessarily large amounts of data (due to laginess).
-/datum/nano_module/program/arcade_classic/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/arcade_classic/proc/build_arcade_data(mob/user)
 	var/list/data = host.initial_data(program)
-
 	data["src"] = "\ref[src]" //[SIERRA-ADD]
 	data["player_health"] = player_health
 	data["player_mana"] = player_mana
@@ -72,6 +74,50 @@
 	data["enemy_name"] = enemy_name
 	data["gameover"] = gameover
 	data["information"] = information
+	return data
+
+/datum/nano_module/program/arcade_classic/sui_data(mob/user)
+	return build_arcade_data(user)
+
+/datum/nano_module/program/arcade_classic/proc/perform_turn(action)
+	if(action == "new_game")
+		new_game()
+		return TRUE
+	if(gameover)
+		return TRUE
+	if(action == "attack")
+		var/damage = rand(2, 6)
+		information = "You attack for [damage] damage."
+		playsound(program.holder.loc, pick('mods/newUI/sound/attack1.ogg', 'mods/newUI/sound/attack2.ogg'), 50, 1)
+		enemy_health -= damage
+		enemy_play()
+		check_gameover()
+		return TRUE
+	if(action == "heal")
+		var/healfor = rand(6, 8)
+		var/cost = rand(1, 3)
+		information = "You heal yourself for [healfor] damage, using [cost] energy in the process."
+		playsound(program.holder.loc, pick('mods/newUI/sound/heal1.ogg', 'mods/newUI/sound/heal2.ogg'), 50, 1)
+		player_health += healfor
+		player_mana -= cost
+		enemy_play()
+		check_gameover()
+		return TRUE
+	if(action == "regain_mana")
+		var/regen = rand(4, 7)
+		information = "You rest of a while, regaining [regen] energy."
+		playsound(program.holder.loc, pick('mods/newUI/sound/-mana2.ogg', 'mods/newUI/sound/-mana1.ogg'), 50, 1)
+		player_mana += regen
+		enemy_play()
+		check_gameover()
+		return TRUE
+	return FALSE
+
+/datum/nano_module/program/arcade_classic/sui_act(action, list/params, datum/sui/ui)
+	return perform_turn(action)
+
+/datum/nano_module/program/arcade_classic/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_arcade_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
@@ -131,33 +177,16 @@
 	if(..())		// Always begin your Topic() calls with a parent call!
 		return 1
 	if(href_list["new_game"])
-		new_game()
+		perform_turn("new_game")
 		return 1	// Returning 1 (TRUE) in Topic automatically handles UI updates.
 	if(gameover)	// If the game has already ended, we don't want the following three topic calls to be processed at all.
 		return 1	// Instead of adding checks into each of those three, we can easily add this one check here to reduce on code copy-paste.
 	if(href_list["attack"])
-		var/damage = rand(2, 6)
-		information = "You attack for [damage] damage."
-		playsound(program.holder.loc, pick('mods/newUI/sound/attack1.ogg', 'mods/newUI/sound/attack2.ogg'), 50, 1)//[SIERRA-ADD]
-		enemy_health -= damage
-		enemy_play()
-		check_gameover()
+		perform_turn("attack")
 		return 1
 	if(href_list["heal"])
-		var/healfor = rand(6, 8)
-		var/cost = rand(1, 3)
-		information = "You heal yourself for [healfor] damage, using [cost] energy in the process."
-		playsound(program.holder.loc, pick('mods/newUI/sound/heal1.ogg', 'mods/newUI/sound/heal2.ogg'), 50, 1)//[SIERRA-ADD]
-		player_health += healfor
-		player_mana -= cost
-		enemy_play()
-		check_gameover()
+		perform_turn("heal")
 		return 1
 	if(href_list["regain_mana"])
-		var/regen = rand(4, 7)
-		information = "You rest of a while, regaining [regen] energy."
-		playsound(program.holder.loc, pick('mods/newUI/sound/-mana2.ogg', 'mods/newUI/sound/-mana1.ogg'), 50, 1)//[SIERRA-ADD]
-		player_mana += regen
-		enemy_play()
-		check_gameover()
+		perform_turn("regain_mana")
 		return 1

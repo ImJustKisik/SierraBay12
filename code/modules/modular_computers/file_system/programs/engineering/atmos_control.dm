@@ -17,6 +17,9 @@
 /datum/nano_module/program/atmos_control
 	name = "Atmospherics Control"
 	available_to_ai = TRUE
+	sui_interface_name = "AtmosControl"
+	sui_width = 625
+	sui_height = 625
 	var/obj/access = new()
 	var/emagged = FALSE
 	var/ui_ref
@@ -42,14 +45,10 @@
 		return 1
 
 	if(href_list["alarm"])
-		if(ui_ref)
-			var/obj/machinery/alarm/alarm = locate(href_list["alarm"]) in (length(monitored_alarms) ? monitored_alarms : SSmachines.machinery)
-			if(alarm)
-				var/datum/topic_state/TS = generate_state(alarm)
-				alarm.ui_interact(usr, master_ui = ui_ref, state = TS)
+		open_remote_alarm(usr, href_list["alarm"])
 		return 1
 
-/datum/nano_module/program/atmos_control/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, master_ui = null, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/atmos_control/proc/build_atmos_control_data(mob/user)
 	var/list/data = host.initial_data(program)
 	var/alarms[0]
 	var/alarmsAlert[0]
@@ -71,6 +70,25 @@
 	data["alarms"] = sortByKey(alarms, "name")
 	data["alarmsAlert"] = sortByKey(alarmsAlert, "name")
 	data["alarmsDanger"] = sortByKey(alarmsDanger, "name")
+	return data
+
+/datum/nano_module/program/atmos_control/sui_data(mob/user)
+	return build_atmos_control_data(user)
+
+/datum/nano_module/program/atmos_control/proc/open_remote_alarm(mob/user, alarm_ref)
+	var/obj/machinery/alarm/alarm = locate(alarm_ref) in (length(monitored_alarms) ? monitored_alarms : SSmachines.machinery)
+	if(alarm)
+		var/datum/topic_state/TS = generate_state(alarm)
+		alarm.ui_interact(user, state = TS)
+	return TRUE
+
+/datum/nano_module/program/atmos_control/sui_act(action, list/params, datum/sui/ui)
+	if(action == "open_alarm")
+		return open_remote_alarm(ui?.user, params["alarm"])
+	return FALSE
+
+/datum/nano_module/program/atmos_control/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, master_ui = null, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_atmos_control_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if(!ui)

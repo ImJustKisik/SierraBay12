@@ -146,7 +146,9 @@
 /datum/extension/interactive/ntos/proc/window_closed(datum/computer_file/program/program, mob/user = null)
 	if(!program)
 		return
-	if ((program in running_program_windows) && CanUseTopic(user) > STATUS_CLOSE)
+	if(CanUseTopic(user) <= STATUS_CLOSE)
+		return
+	if(program == active_program || (program in running_program_windows))
 		minimize_program(program, user)
 
 /datum/extension/interactive/ntos/proc/close_extra_window(datum/computer_file/program/program)

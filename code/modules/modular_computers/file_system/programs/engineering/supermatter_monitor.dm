@@ -31,6 +31,9 @@
 /datum/nano_module/program/supermatter_monitor
 	name = "Supermatter monitor"
 	available_to_ai = TRUE
+	sui_interface_name = "SupermatterMonitor"
+	sui_width = 720
+	sui_height = 560
 	var/list/supermatters
 	var/obj/machinery/power/supermatter/active = null		// Currently selected supermatter crystal.
 	var/screen = SM_MONITOR_SCREEN_MAIN // Which screen the monitor is currently on
@@ -92,7 +95,7 @@
 			continue
 		entry[category] = value
 
-/datum/nano_module/program/supermatter_monitor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/supermatter_monitor/proc/build_supermatter_data(mob/user)
 	var/list/data = host.initial_data(program)
 	var/engine_skill = user.get_skill_value(SKILL_ENGINES)
 
@@ -101,42 +104,41 @@
 		if(!T)
 			active = null
 			screen = initial(screen)
-			return
-		var/datum/gas_mixture/air = T.return_air()
-		if(!istype(air))
-			active = null
-			screen = initial(screen)
-			return
-
-		var/ambient_pressure = air.return_pressure()
-		var/epr = active.get_epr()
-
-		data["active"] = TRUE
-		data["screen"] = screen
-		data["threshholds"] = active.threshholds
-		data["SM_integrity"] = min(process_data_output(engine_skill, active.get_integrity()), 100)
-		data["SM_power"] = process_data_output(engine_skill, active.power)
-		data["SM_power_label"] = get_threshhold_color(SUPERMATTER_DATA_EER, active.power)
-		data["SM_ambienttemp"] = process_data_output(engine_skill, air.temperature)
-		data["SM_ambienttemp_label"] = get_threshhold_color(SUPERMATTER_DATA_TEMPERATURE, air.temperature)
-		data["SM_ambientpressure"] = process_data_output(engine_skill, ambient_pressure)
-		data["SM_ambientpressure_label"] = get_threshhold_color(SUPERMATTER_DATA_PRESSURE, ambient_pressure)
-		data["SM_EPR"] = process_data_output(engine_skill, epr)
-		data["SM_EPR_label"] = get_threshhold_color(SUPERMATTER_DATA_EPR, epr)
-		if(air.total_moles)
-			data["SM_gas_O2"] = round(100*air.gas[GAS_OXYGEN]/air.total_moles,0.01)
-			data["SM_gas_CO2"] = round(100*air.gas[GAS_CO2]/air.total_moles,0.01)
-			data["SM_gas_N2"] = round(100*air.gas[GAS_NITROGEN]/air.total_moles,0.01)
-			data["SM_gas_PH"] = round(100*air.gas[GAS_PHORON]/air.total_moles,0.01)
-			data["SM_gas_N2O"] = round(100*air.gas[GAS_N2O]/air.total_moles,0.01)
-			data["SM_gas_H2"] = round(100*air.gas[GAS_HYDROGEN]/air.total_moles,0.01)
 		else
-			data["SM_gas_O2"] = 0
-			data["SM_gas_CO2"] = 0
-			data["SM_gas_N2"] = 0
-			data["SM_gas_PH"] = 0
-			data["SM_gas_N2O"] = 0
-			data["SM_gas_H2"] = 0
+			var/datum/gas_mixture/air = T.return_air()
+			if(!istype(air))
+				active = null
+				screen = initial(screen)
+			else
+				var/ambient_pressure = air.return_pressure()
+				var/epr = active.get_epr()
+
+				data["active"] = TRUE
+				data["screen"] = screen
+				data["threshholds"] = active.threshholds
+				data["SM_integrity"] = min(process_data_output(engine_skill, active.get_integrity()), 100)
+				data["SM_power"] = process_data_output(engine_skill, active.power)
+				data["SM_power_label"] = get_threshhold_color(SUPERMATTER_DATA_EER, active.power)
+				data["SM_ambienttemp"] = process_data_output(engine_skill, air.temperature)
+				data["SM_ambienttemp_label"] = get_threshhold_color(SUPERMATTER_DATA_TEMPERATURE, air.temperature)
+				data["SM_ambientpressure"] = process_data_output(engine_skill, ambient_pressure)
+				data["SM_ambientpressure_label"] = get_threshhold_color(SUPERMATTER_DATA_PRESSURE, ambient_pressure)
+				data["SM_EPR"] = process_data_output(engine_skill, epr)
+				data["SM_EPR_label"] = get_threshhold_color(SUPERMATTER_DATA_EPR, epr)
+				if(air.total_moles)
+					data["SM_gas_O2"] = round(100*air.gas[GAS_OXYGEN]/air.total_moles,0.01)
+					data["SM_gas_CO2"] = round(100*air.gas[GAS_CO2]/air.total_moles,0.01)
+					data["SM_gas_N2"] = round(100*air.gas[GAS_NITROGEN]/air.total_moles,0.01)
+					data["SM_gas_PH"] = round(100*air.gas[GAS_PHORON]/air.total_moles,0.01)
+					data["SM_gas_N2O"] = round(100*air.gas[GAS_N2O]/air.total_moles,0.01)
+					data["SM_gas_H2"] = round(100*air.gas[GAS_HYDROGEN]/air.total_moles,0.01)
+				else
+					data["SM_gas_O2"] = 0
+					data["SM_gas_CO2"] = 0
+					data["SM_gas_N2"] = 0
+					data["SM_gas_PH"] = 0
+					data["SM_gas_N2O"] = 0
+					data["SM_gas_H2"] = 0
 	else
 		var/list/per_supermatter_data = list()
 		for (var/obj/machinery/power/supermatter/supermatter as anything in supermatters)
@@ -150,6 +152,49 @@
 			))
 		data["supermatters"] = per_supermatter_data
 		data["active"] = FALSE
+	return data
+
+/datum/nano_module/program/supermatter_monitor/sui_data(mob/user)
+	return build_supermatter_data(user)
+
+/datum/nano_module/program/supermatter_monitor/proc/prompt_threshhold_update(mob/user, threshhold, category, current_value, datum/topic_state/state = null)
+	var/new_value = input(user, "Select a new threshhold, or set to -1 to disable:", "Threshhold", current_value) as null | num
+	if(state && !CanInteract(user, state))
+		return FALSE
+	if (!isnull(new_value))
+		set_threshhold_value(threshhold, category, new_value)
+	return TRUE
+
+/datum/nano_module/program/supermatter_monitor/proc/select_supermatter(supermatter_ref)
+	var/obj/machinery/power/supermatter/supermatter = locate(supermatter_ref)
+	if (!(supermatter in supermatters))
+		return FALSE
+	active = supermatter
+	return TRUE
+
+/datum/nano_module/program/supermatter_monitor/sui_act(action, list/params, datum/sui/ui)
+	if(action == "clear")
+		active = null
+		screen = initial(screen)
+		return TRUE
+	if(action == "refresh")
+		refresh()
+		return TRUE
+	if(action == "screen")
+		screen = params["screen"]
+		return TRUE
+	if(action == "set_threshhold")
+		var/value = params["value"]
+		if(isnull(value) || value == "")
+			return prompt_threshhold_update(ui?.user, params["threshhold"], params["category"], params["current_value"], ui?.state)
+		set_threshhold_value(params["threshhold"], params["category"], text2num(value))
+		return TRUE
+	if(action == "select_supermatter")
+		return select_supermatter(params["ref"])
+	return FALSE
+
+/datum/nano_module/program/supermatter_monitor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_supermatter_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
@@ -178,13 +223,9 @@
 		screen = SM_MONITOR_SCREEN_MAIN
 		return TOPIC_HANDLED
 	if (href_list["set_threshhold"])
-		var/new_value = input(usr, "Select a new threshhold, or set to -1 to disable:", "Threshhold", href_list["value"]) as null | num
-		if (!isnull(new_value))
-			set_threshhold_value(href_list["threshhold"], href_list["category"], new_value)
+		prompt_threshhold_update(usr, href_list["threshhold"], href_list["category"], href_list["value"])
 		return TOPIC_HANDLED
 	if (href_list["set"])
-		var/obj/machinery/power/supermatter/supermatter = locate(href_list["set"])
-		if (!(supermatter in supermatters))
+		if(!select_supermatter(href_list["set"]))
 			return TOPIC_NOACTION
-		active = supermatter
 		return TOPIC_HANDLED

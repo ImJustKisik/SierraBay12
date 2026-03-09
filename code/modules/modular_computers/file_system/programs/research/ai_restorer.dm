@@ -23,43 +23,62 @@
 	if(..())
 		return 1
 
-	if(!usr.skill_check(SKILL_COMPUTER, SKILL_TRAINED))
+	if(href_list["PRG_beginReconstruction"])
+		perform_ai_action("beginReconstruction", usr)
+		return 1
+	if(href_list["PRG_purgeAiLaws"])
+		perform_ai_action("purgeAiLaws", usr)
+		return 1
+	if(href_list["PRG_resetLaws"])
+		perform_ai_action("resetLaws", usr)
+		return 1
+	if(href_list["PRG_uploadDefault"])
+		perform_ai_action("uploadDefault", usr)
+		return 1
+	if(href_list["PRG_addCustomSuppliedLaw"])
+		perform_ai_action("addCustomSuppliedLaw", usr)
 		return 1
 
+/datum/computer_file/program/aidiag/proc/perform_ai_action(action, mob/user, datum/topic_state/state = null)
+	if(!user)
+		return FALSE
+	if(!user.skill_check(SKILL_COMPUTER, SKILL_TRAINED))
+		return TRUE
 	var/mob/living/silicon/ai/A = get_ai()
 	if(!A)
-		return 0
-	if(href_list["PRG_beginReconstruction"])
+		return FALSE
+	if(action == "beginReconstruction")
 		if((A.hardware_integrity() < 100) || (A.backup_capacitor() < 100))
 			restoring = 1
-		return 1
-
-	// Following actions can only be used by non-silicon users, as they involve manipulation of laws.
-	if(issilicon(usr))
-		return 0
-	if(href_list["PRG_purgeAiLaws"])
+		return TRUE
+	if(issilicon(user))
+		return FALSE
+	if(action == "purgeAiLaws")
 		A.laws.clear_zeroth_laws()
 		A.laws.clear_ion_laws()
 		A.laws.clear_inherent_laws()
 		A.laws.clear_supplied_laws()
 		to_chat(A, SPAN_DANGER("All laws purged."))
-		return 1
-	if(href_list["PRG_resetLaws"])
+		return TRUE
+	if(action == "resetLaws")
 		A.laws.clear_ion_laws()
 		A.laws.clear_supplied_laws()
 		to_chat(A, SPAN_DANGER("Non-core laws reset."))
-		return 1
-	if(href_list["PRG_uploadDefault"])
+		return TRUE
+	if(action == "uploadDefault")
 		A.laws = new GLOB.using_map.default_law_type
 		to_chat(A, SPAN_DANGER("All laws purged. Default lawset uploaded."))
-		return 1
-	if(href_list["PRG_addCustomSuppliedLaw"])
-		var/law_to_add = sanitize(input("Please enter a new law for the AI.", "Custom Law Entry"))
-		var/sector = input("Please enter the priority for your new law. Can only write to law sectors 15 and above.", "Law Priority (15+)") as num
+		return TRUE
+	if(action == "addCustomSuppliedLaw")
+		var/law_to_add = sanitize(input(user, "Please enter a new law for the AI.", "Custom Law Entry"))
+		var/sector = input(user, "Please enter the priority for your new law. Can only write to law sectors 15 and above.", "Law Priority (15+)") as num
+		if(state && !CanInteract(user, state))
+			return FALSE
 		sector = clamp(sector, MIN_SUPPLIED_LAW_NUMBER, MAX_SUPPLIED_LAW_NUMBER)
 		A.add_supplied_law(sector, law_to_add)
 		to_chat(A, SPAN_DANGER("Custom law uploaded to sector [sector]: [law_to_add]."))
-		return 1
+		return TRUE
+	return FALSE
 
 
 /datum/computer_file/program/aidiag/process_tick()
@@ -87,8 +106,11 @@
 
 /datum/nano_module/program/computer_aidiag
 	name = "AI Maintenance Utility"
+	sui_interface_name = "AIDiag"
+	sui_width = 600
+	sui_height = 400
 
-/datum/nano_module/program/computer_aidiag/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/computer_aidiag/proc/build_aidiag_data(mob/user)
 	var/list/data = host.initial_data(program)
 
 	data += "skill_fail"
@@ -120,6 +142,21 @@
 			)))
 
 		data["ai_laws"] = all_laws
+
+	return data
+
+/datum/nano_module/program/computer_aidiag/sui_data(mob/user)
+	return build_aidiag_data(user)
+
+/datum/nano_module/program/computer_aidiag/proc/perform_ai_action(action, mob/user, datum/topic_state/state = null)
+	var/datum/computer_file/program/aidiag/prog = program
+	return prog?.perform_ai_action(action, user, state)
+
+/datum/nano_module/program/computer_aidiag/sui_act(action, list/params, datum/sui/ui)
+	return perform_ai_action(action, ui?.user, ui?.state)
+
+/datum/nano_module/program/computer_aidiag/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_aidiag_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)

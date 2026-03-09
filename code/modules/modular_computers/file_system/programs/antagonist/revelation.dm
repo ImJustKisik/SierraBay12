@@ -25,25 +25,36 @@
 	computer.system_shutdown()
 	computer.voltage_overload()
 
+/datum/computer_file/program/revelation/proc/toggle_arm()
+	armed = !armed
+	return TRUE
+
+/datum/computer_file/program/revelation/proc/obfuscate_program(mob/living/user, datum/topic_state/state = null)
+	if(!user)
+		return FALSE
+	var/newname = sanitize(input(user, "Enter new program name: "))
+	if(state && !CanInteract(user, state))
+		return FALSE
+	if(newname && program_state == PROGRAM_STATE_ACTIVE)
+		filedesc = newname
+		if(ntnet_global)
+			for(var/datum/computer_file/program/P in ntnet_global.available_station_software)
+				if(filedesc == P.filedesc)
+					program_menu_icon = P.program_menu_icon
+					break
+	return TRUE
+
 /datum/computer_file/program/revelation/Topic(href, href_list)
 	if(..())
 		return TOPIC_HANDLED
 	else if(href_list["PRG_arm"])
-		armed = !armed
+		toggle_arm()
 		return TOPIC_HANDLED
 	else if(href_list["PRG_activate"])
 		activate()
 		return TOPIC_HANDLED
 	else if(href_list["PRG_obfuscate"])
-		var/mob/living/user = usr
-		var/newname = sanitize(input(user, "Enter new program name: "))
-		if(newname && program_state == PROGRAM_STATE_ACTIVE)
-			filedesc = newname
-			if(ntnet_global)
-				for(var/datum/computer_file/program/P in ntnet_global.available_station_software)
-					if(filedesc == P.filedesc)
-						program_menu_icon = P.program_menu_icon
-						break
+		obfuscate_program(usr)
 		return TOPIC_HANDLED
 
 /datum/computer_file/program/revelation/clone()
@@ -53,16 +64,40 @@
 
 /datum/nano_module/program/revelation
 	name = "Revelation Virus"
+	sui_interface_name = "Revelation"
+	sui_width = 400
+	sui_height = 250
 
-/datum/nano_module/program/revelation/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
-	var/list/data = list()
+/datum/nano_module/program/revelation/proc/build_revelation_data(mob/user)
 	var/datum/computer_file/program/revelation/PRG = program
 	if(!istype(PRG))
-		return
-
-	data = PRG.get_header_data()
+		return list()
+	var/list/data = PRG.get_header_data()
 
 	data["armed"] = PRG.armed
+
+	return data
+
+/datum/nano_module/program/revelation/sui_data(mob/user)
+	return build_revelation_data(user)
+
+/datum/nano_module/program/revelation/sui_act(action, list/params, datum/sui/ui)
+	var/datum/computer_file/program/revelation/PRG = program
+	if(!istype(PRG))
+		return FALSE
+	if(action == "arm")
+		return PRG.toggle_arm()
+	if(action == "activate")
+		PRG.activate()
+		return TRUE
+	if(action == "obfuscate")
+		return PRG.obfuscate_program(ui?.user, ui?.state)
+	return FALSE
+
+/datum/nano_module/program/revelation/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_revelation_data(user)
+	if(!length(data))
+		return
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)

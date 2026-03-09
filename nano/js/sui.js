@@ -305,12 +305,195 @@ var SUI = (function () {
         _interfaces[name] = component
     }
 
+    function isComputerProgramShell(data) {
+        return !!(data && data.PC_hasheader && typeof data.PC_showexitprogram !== 'undefined')
+    }
+
+    function applyShellScrollMode(lockShellScroll) {
+        var shouldLock = !!lockShellScroll
+        var html = document.documentElement
+        var body = document.body
+        var root = document.getElementById('sui-root')
+
+        if (html) {
+            html.style.width = '100%'
+            html.style.height = '100%'
+            html.style.overflow = shouldLock ? 'hidden' : 'auto'
+        }
+
+        if (body) {
+            body.style.margin = '0'
+            body.style.width = '100%'
+            body.style.minHeight = '100%'
+            body.style.height = shouldLock ? '100%' : 'auto'
+            body.style.overflow = shouldLock ? 'hidden' : 'auto'
+            body.style.boxSizing = 'border-box'
+        }
+
+        if (!root) {
+            return
+        }
+
+        root.style.width = '100%'
+        root.style.minHeight = '100%'
+        root.style.boxSizing = 'border-box'
+
+        if (shouldLock) {
+            root.style.height = '100%'
+            root.style.position = 'fixed'
+            root.style.left = '0'
+            root.style.top = '0'
+            root.style.right = '0'
+            root.style.bottom = '0'
+            root.style.overflow = 'hidden'
+            return
+        }
+
+        root.style.height = 'auto'
+        root.style.position = 'relative'
+        root.style.left = ''
+        root.style.top = ''
+        root.style.right = ''
+        root.style.bottom = ''
+        root.style.overflow = 'visible'
+    }
+
+    function ProgramChromeButton(props) {
+        return h('button', {
+            type: 'button',
+            disabled: !!props.disabled,
+            onClick: function (event) {
+                event.preventDefault()
+                if (props.disabled || !props.onClick) {
+                    return
+                }
+                props.onClick(event)
+            },
+            style: {
+                minWidth: '78px',
+                padding: '4px 10px',
+                border: '1px solid #40628a',
+                backgroundColor: props.disabled ? '#2b2b2b' : '#1d3552',
+                color: props.disabled ? '#777777' : '#dbe9f8',
+                cursor: props.disabled ? 'default' : 'pointer',
+                fontSize: '11px',
+                fontWeight: 'bold',
+                textTransform: 'uppercase'
+            }
+        }, props.children)
+    }
+
+    function ProgramChrome(props) {
+        var data = props.data || {}
+        var config = props.config || {}
+        var metaItems = []
+
+        if (data.PC_stationtime) {
+            metaItems.push('Time: ' + data.PC_stationtime)
+        }
+        if (data.PC_showbatteryicon && data.PC_batterypercent) {
+            metaItems.push('Battery: ' + data.PC_batterypercent)
+        }
+
+        return h('div', {
+            style: {
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '12px',
+                padding: '8px 10px',
+                borderBottom: '1px solid #40628a',
+                backgroundColor: '#141414'
+            }
+        },
+            h('div', {
+                style: {
+                    minWidth: '0',
+                    flex: '1 1 auto'
+                }
+            },
+                h('div', {
+                    style: {
+                        color: '#ffffff',
+                        fontSize: '13px',
+                        fontWeight: 'bold',
+                        lineHeight: '16px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                    }
+                }, config.title || 'Program'),
+                metaItems.length ? h('div', {
+                    style: {
+                        marginTop: '2px',
+                        color: '#8ba5c4',
+                        fontSize: '10px',
+                        lineHeight: '12px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis'
+                    }
+                }, metaItems.join('  |  ')) : null
+            ),
+            h('div', {
+                style: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    flex: '0 0 auto'
+                }
+            },
+                h(ProgramChromeButton, {
+                    disabled: !data.PC_activeprogram,
+                    onClick: function () { act('__pc_minimize') }
+                }, 'Minimize'),
+                data.PC_showexitprogram ? h(ProgramChromeButton, {
+                    disabled: !data.PC_activeprogram,
+                    onClick: function () { act('__pc_exit') }
+                }, 'Exit') : null
+            )
+        )
+    }
+
     function AppRoot(props) {
         var backend = useBackend()
         var status = backend.config.status !== undefined ? backend.config.status : 2 // 2 = INTERACTIVE
+        var hasProgramChrome = isComputerProgramShell(backend.data)
+        var shellLockScroll = !!backend.config.shell_lock_scroll
+        var contentStyle = hasProgramChrome
+            ? {
+                display: 'flex',
+                flexDirection: 'column',
+                width: '100%',
+                height: shellLockScroll ? '100%' : 'auto',
+                minHeight: '100%',
+                position: 'relative',
+                boxSizing: 'border-box',
+                overflow: shellLockScroll ? 'hidden' : 'visible'
+            }
+            : {
+                width: '100%',
+                height: shellLockScroll ? '100%' : 'auto',
+                minHeight: '100%',
+                position: 'relative',
+                boxSizing: 'border-box',
+                overflow: shellLockScroll ? 'hidden' : 'visible'
+            }
 
-        return h('div', { style: { width: '100%', minHeight: '100%', position: 'relative' } },
-            h(props.Component, null),
+        useEffect(function () {
+            applyShellScrollMode(shellLockScroll)
+        }, [shellLockScroll])
+
+        return h('div', { style: contentStyle },
+            hasProgramChrome ? h(ProgramChrome, {
+                data: backend.data,
+                config: backend.config
+            }) : null,
+            h('div', {
+                style: hasProgramChrome
+                    ? { flex: '1 1 auto', minHeight: '0', overflow: shellLockScroll ? 'hidden' : 'visible' }
+                    : null
+            }, h(props.Component, null)),
             status < 2 ? h('div', {
                 style: {
                     position: 'fixed',
@@ -341,6 +524,30 @@ var SUI = (function () {
         var interfaceName = body.getAttribute('data-sui-interface')
         var initialDataStr = body.getAttribute('data-initial-data')
 
+        function suppressSecondaryInput(event) {
+            if (!event) {
+                return false
+            }
+            if (event.preventDefault) {
+                event.preventDefault()
+            }
+            if (event.stopPropagation) {
+                event.stopPropagation()
+            }
+            event.returnValue = false
+            return false
+        }
+
+        if (!window.__suiInputGuardsInstalled) {
+            window.__suiInputGuardsInstalled = true
+            document.addEventListener('contextmenu', suppressSecondaryInput, true)
+            document.addEventListener('mousedown', function (event) {
+                if (event && event.button === 2) {
+                    suppressSecondaryInput(event)
+                }
+            }, true)
+        }
+
         // Parse initial data
         if (initialDataStr) {
             try {
@@ -356,6 +563,7 @@ var SUI = (function () {
             root.id = 'sui-root'
             body.appendChild(root)
         }
+        applyShellScrollMode(!!(_state.config && _state.config.shell_lock_scroll))
 
         // Find and render the interface
         var InterfaceComponent = _interfaces[interfaceName]

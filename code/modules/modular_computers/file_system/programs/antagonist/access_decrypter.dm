@@ -30,6 +30,35 @@
 	message = ""
 	progress = 0
 
+/datum/computer_file/program/access_decrypter/proc/start_decryption(mob/user, access)
+	operator_skill = user?.get_skill_value(SKILL_COMPUTER)
+	if(running)
+		return TRUE
+	var/obj/item/stock_parts/computer/processor_unit/CPU = computer.get_component(PART_CPU)
+	var/obj/item/stock_parts/computer/card_slot/RFID = computer.get_component(PART_CARD)
+	if(!istype(CPU) || !CPU.check_functionality() || !istype(RFID) || !RFID.check_functionality())
+		message = "A fatal hardware error has been detected."
+		return TRUE
+	if(!istype(RFID.stored_card))
+		message = "RFID card is not present in the device. Operation aborted."
+		return TRUE
+
+	var/obj/item/card/id/id_card = RFID.stored_card
+	if(access in id_card.access)
+		return TRUE
+	if(access in restricted_access_codes)
+		return TRUE
+	if(skill_restricted_access_codes[access] && operator_skill < skill_restricted_access_codes[access])
+		return TRUE
+	target_access = get_access_by_id(access)
+	if(!target_access)
+		return TRUE
+
+	running = TRUE
+	if(!prob(get_sneak_chance()))
+		ntnet_global.add_log_with_ids_check("Unauthorised access attempt to primary keycode database.", computer.get_component(PART_NETWORK))
+	return TRUE
+
 /datum/computer_file/program/access_decrypter/process_tick()
 	. = ..()
 	if(!running)
@@ -65,38 +94,11 @@
 /datum/computer_file/program/access_decrypter/Topic(href, href_list)
 	if(..())
 		return TOPIC_HANDLED
-	operator_skill = usr.get_skill_value(SKILL_COMPUTER)
 	if(href_list["PRG_reset"])
 		reset()
 		return TOPIC_HANDLED
 	if(href_list["PRG_execute"])
-		if(running)
-			return TOPIC_HANDLED
-		var/obj/item/stock_parts/computer/processor_unit/CPU = computer.get_component(PART_CPU)
-		var/obj/item/stock_parts/computer/card_slot/RFID = computer.get_component(PART_CARD)
-		if(!istype(CPU) || !CPU.check_functionality() || !istype(RFID) || !RFID.check_functionality())
-			message = "A fatal hardware error has been detected."
-			return
-		if(!istype(RFID.stored_card))
-			message = "RFID card is not present in the device. Operation aborted."
-			return
-
-		var/access = href_list["PRG_execute"]
-		var/obj/item/card/id/id_card = RFID.stored_card
-		if(access in id_card.access)
-			return TOPIC_HANDLED
-		if(access in restricted_access_codes)
-			return TOPIC_HANDLED
-		if(skill_restricted_access_codes[access] && operator_skill < skill_restricted_access_codes[access])
-			return TOPIC_HANDLED
-		target_access = get_access_by_id(access)
-		if(!target_access)
-			return TOPIC_HANDLED
-
-		running = TRUE
-
-		if (!prob(get_sneak_chance()))
-			ntnet_global.add_log_with_ids_check("Unauthorised access attempt to primary keycode database.", computer.get_component(PART_NETWORK))
+		start_decryption(usr, href_list["PRG_execute"])
 		return TOPIC_HANDLED
 
 /datum/computer_file/program/access_decrypter/proc/get_sneak_chance()
@@ -109,15 +111,17 @@
 
 /datum/nano_module/program/access_decrypter
 	name = "NTNet Access Decrypter"
+	sui_interface_name = "AccessDecrypter"
+	sui_width = 550
+	sui_height = 400
 
-/datum/nano_module/program/access_decrypter/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/access_decrypter/proc/build_decrypter_data(mob/user)
 	if(!ntnet_global)
-		return
+		return list()
 	var/datum/computer_file/program/access_decrypter/PRG = program
-	var/list/data = list()
 	if(!istype(PRG))
-		return
-	data = PRG.get_header_data()
+		return list()
+	var/list/data = PRG.get_header_data()
 
 	var/obj/item/stock_parts/computer/card_slot/RFID = PRG.computer.get_component(PART_CARD)
 	if(PRG.message)
@@ -137,6 +141,7 @@
 		data["dos_strings"] = strings
 	else if(RFID && RFID.stored_card)
 		var/obj/item/card/id/id_card = RFID.stored_card
+		var/current_skill = istype(user) ? user.get_skill_value(SKILL_COMPUTER) : PRG.operator_skill
 		var/list/regions = list()
 		for(var/i = ACCESS_REGION_MIN; i <= ACCESS_REGION_MAX; i++)
 			var/list/accesses = list()
@@ -146,13 +151,34 @@
 						"desc" = replacetext(get_access_desc(access), " ", "&nbsp"),
 						"ref" = access,
 						"allowed" = (access in id_card.access) ? 1 : 0,
-						"blocked" = ((access in PRG.restricted_access_codes) || (PRG.skill_restricted_access_codes[access] && PRG.operator_skill < PRG.skill_restricted_access_codes[access])) ? 1 : 0
+						"blocked" = ((access in PRG.restricted_access_codes) || (PRG.skill_restricted_access_codes[access] && current_skill < PRG.skill_restricted_access_codes[access])) ? 1 : 0
 					)))
 
 			regions.Add(list(list(
 				"name" = get_region_accesses_name(i),
 				"accesses" = accesses)))
 		data["regions"] = regions
+
+	return data
+
+/datum/nano_module/program/access_decrypter/sui_data(mob/user)
+	return build_decrypter_data(user)
+
+/datum/nano_module/program/access_decrypter/sui_act(action, list/params, datum/sui/ui)
+	var/datum/computer_file/program/access_decrypter/PRG = program
+	if(!istype(PRG))
+		return FALSE
+	if(action == "reset")
+		PRG.reset()
+		return TRUE
+	if(action == "execute")
+		return PRG.start_decryption(ui?.user, params["access"])
+	return FALSE
+
+/datum/nano_module/program/access_decrypter/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_decrypter_data(user)
+	if(!length(data))
+		return
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)

@@ -32,6 +32,9 @@
 
 /datum/nano_module/program/alarm_monitor
 	name = "Alarm monitor"
+	sui_interface_name = "AlarmMonitor"
+	sui_width = 800
+	sui_height = 800
 	var/list_cameras = 0						// Whether or not to list camera references. A future goal would be to merge this with the enginering/security camera console. Currently really only for AI-use.
 	var/list/datum/alarm_handler/alarm_handlers // The particular list of alarm handlers this alarm monitor should present to the user.
 	available_to_ai = FALSE
@@ -97,14 +100,10 @@
 	if(..())
 		return 1
 	if(href_list["switchTo"])
-		var/obj/machinery/camera/C = locate(href_list["switchTo"]) in cameranet.cameras
-		if(!C)
-			return
-
-		usr.switch_to_camera(C)
+		switch_to_alarm_camera(usr, href_list["switchTo"])
 		return 1
 
-/datum/nano_module/program/alarm_monitor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/alarm_monitor/proc/build_alarm_monitor_data(mob/user)
 	var/list/data = host.initial_data(program)
 
 	var/categories[0]
@@ -135,6 +134,25 @@
 					"cameras" = cameras,
 					"lost_sources" = length(lost_sources) ? sanitize(english_list(lost_sources, nothing_text = "", and_text = ", ")) : ""))
 	data["categories"] = categories
+	return data
+
+/datum/nano_module/program/alarm_monitor/sui_data(mob/user)
+	return build_alarm_monitor_data(user)
+
+/datum/nano_module/program/alarm_monitor/proc/switch_to_alarm_camera(mob/user, camera_ref)
+	var/obj/machinery/camera/C = locate(camera_ref) in cameranet.cameras
+	if(!C)
+		return FALSE
+	user.switch_to_camera(C)
+	return TRUE
+
+/datum/nano_module/program/alarm_monitor/sui_act(action, list/params, datum/sui/ui)
+	if(action == "switch_camera")
+		return switch_to_alarm_camera(ui?.user, params["camera"])
+	return FALSE
+
+/datum/nano_module/program/alarm_monitor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_alarm_monitor_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)

@@ -33,6 +33,9 @@
 /datum/nano_module/program/power_monitor
 	name = "Power monitor"
 	available_to_ai = TRUE
+	sui_interface_name = "PowerMonitor"
+	sui_width = 800
+	sui_height = 500
 	var/list/grid_sensors
 	var/active_sensor = null	//name_tag of the currently selected sensor
 
@@ -55,7 +58,7 @@
 
 // If PC is not null header template is loaded. Use PC.get_header_data() to get relevant nanoui data from it. All data entries begin with "PC_...."
 // In future it may be expanded to other modular computer devices.
-/datum/nano_module/program/power_monitor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/power_monitor/proc/build_power_data(mob/user)
 	var/list/data = host.initial_data(program)
 
 	var/list/sensors = list()
@@ -74,6 +77,35 @@
 	data["all_sensors"] = sensors
 	if(focus)
 		data["focus"] = focus.return_reading_data()
+	data["active_sensor"] = active_sensor
+	return data
+
+/datum/nano_module/program/power_monitor/sui_data(mob/user)
+	return build_power_data(user)
+
+/datum/nano_module/program/power_monitor/proc/set_active_sensor(sensor_name)
+	active_sensor = sensor_name
+	return TRUE
+
+/datum/nano_module/program/power_monitor/proc/clear_active_sensor()
+	active_sensor = null
+	return TRUE
+
+/datum/nano_module/program/power_monitor/proc/refresh_sensor_cache()
+	refresh_sensors()
+	return TRUE
+
+/datum/nano_module/program/power_monitor/sui_act(action, list/params, datum/sui/ui)
+	if(action == "clear")
+		return clear_active_sensor()
+	if(action == "refresh")
+		return refresh_sensor_cache()
+	if(action == "select_sensor")
+		return set_active_sensor(params["sensor"])
+	return FALSE
+
+/datum/nano_module/program/power_monitor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_power_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
@@ -109,11 +141,11 @@
 	if(..())
 		return 1
 	if( href_list["clear"] )
-		active_sensor = null
+		clear_active_sensor()
 		. = 1
 	if( href_list["refresh"] )
-		refresh_sensors()
+		refresh_sensor_cache()
 		. = 1
 	else if( href_list["setsensor"] )
-		active_sensor = href_list["setsensor"]
+		set_active_sensor(href_list["setsensor"])
 		. = 1

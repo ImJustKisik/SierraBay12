@@ -39,6 +39,11 @@
 /datum/nano_module/program/crew_monitor
 	name = "Crew monitor"
 	available_to_ai = TRUE
+	sui_interface_name = "CrewMonitor"
+	sui_width = 1100
+	sui_height = 800
+	var/map_enabled = TRUE
+	var/map_z_level = null
 
 /datum/nano_module/program/crew_monitor/proc/has_alerts()
 	for(var/z_level in GLOB.using_map.map_levels)
@@ -46,15 +51,82 @@
 			return TRUE
 	return FALSE
 
+/datum/nano_module/program/crew_monitor/proc/build_crew_monitor_data(mob/user)
+	var/list/data = host.initial_data(program)
+
+	var/Z = get_host_z()
+	var/list/crewmembers = crew_repository.health_data(Z)
+	if(isnull(map_z_level))
+		map_z_level = Z
+
+	var/alert_count = 0
+	var/tracking_count = 0
+	for(var/list/member in crewmembers)
+		if(member["alert"])
+			alert_count++
+		if(member["sensor_type"] >= SUIT_SENSOR_TRACKING)
+			tracking_count++
+
+	data["isAI"] = isAI(user)
+	data["crewmembers"] = crewmembers
+	data["map_enabled"] = map_enabled
+	data["map_z_level"] = map_z_level
+	data["map_z_levels"] = GetConnectedZlevels(Z)
+	data["alert_count"] = alert_count
+	data["tracking_count"] = tracking_count
+	data["total_count"] = length(crewmembers)
+	return data
+
+/datum/nano_module/program/crew_monitor/sui_data(mob/user)
+	return build_crew_monitor_data(user)
+
+/datum/nano_module/program/crew_monitor/proc/set_map_state(datum/sui/ui, enabled, z_level = null)
+	map_enabled = !!enabled
+	if(!isnull(z_level))
+		map_z_level = text2num(z_level)
+	if(isnull(map_z_level))
+		map_z_level = get_host_z()
+	ui?.set_show_map(map_enabled, map_z_level, 500)
+	return TRUE
+
+/datum/nano_module/program/crew_monitor/proc/track_crewmember(mob/user, tracked_ref)
+	if(isAI(user))
+		var/mob/living/silicon/ai/AI = user
+		var/mob/living/carbon/human/H = locate(tracked_ref) in SSmobs.mob_list
+		if(hassensorlevel(H, SUIT_SENSOR_TRACKING))
+			AI.ai_actual_track(H)
+	return TRUE
+
+/datum/nano_module/program/crew_monitor/ui_interact_sui(mob/user, ui_key = "main", force_open = 1, master_ui = null, datum/topic_state/state = GLOB.default_state)
+	ui_key = ui_key || "main"
+	var/datum/sui/ui = get_existing_sui_ui(user, ui_key)
+	if(ui && force_open)
+		ui.close()
+		ui = null
+	if(isnull(map_z_level))
+		map_z_level = get_host_z()
+	if(!ui)
+		ui = create_sui_ui(user, ui_key, master_ui, state)
+		ui.set_auto_update(TRUE)
+		ui.open(sui_data(user))
+	else
+		ui.push_data(sui_data(user))
+	set_map_state(ui, map_enabled, map_z_level)
+
+/datum/nano_module/program/crew_monitor/sui_act(action, list/params, datum/sui/ui)
+	if(action == "toggle_map")
+		return set_map_state(ui, !map_enabled, map_z_level)
+	if(action == "set_map_z")
+		return set_map_state(ui, map_enabled, params["z_level"])
+	if(action == "track")
+		return track_crewmember(ui?.user, params["track"])
+	return FALSE
+
 /datum/nano_module/program/crew_monitor/Topic(href, href_list)
 	if(..()) return 1
 
 	if(href_list["track"])
-		if(isAI(usr))
-			var/mob/living/silicon/ai/AI = usr
-			var/mob/living/carbon/human/H = locate(href_list["track"]) in SSmobs.mob_list
-			if(hassensorlevel(H, SUIT_SENSOR_TRACKING))
-				AI.ai_actual_track(H)
+		track_crewmember(usr, href_list["track"])
 		return 1
 
 /datum/nano_module/program/crew_monitor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)

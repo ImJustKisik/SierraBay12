@@ -46,15 +46,35 @@
 	sui_height = 800
 	var/obj/machinery/camera/current_camera = null
 	var/current_network = null
+	var/list/feed_screen_states = list()
 
 
 /datum/nano_module/program/camera_monitor/Destroy()
+	restore_all_feed_screens()
 	reset_current()
 	. = ..()
 
+/datum/nano_module/program/camera_monitor/Topic(href, href_list)
+	if(..())
+		return TRUE
+
+	if(href_list["close"])
+		disconnect_camera_feed(usr)
+		return TRUE
+
+	return FALSE
+
 
 /datum/nano_module/program/camera_monitor/ui_interact_sui(mob/user, ui_key = "main", force_open = 1, master_ui = null, datum/topic_state/state = GLOB.default_state)
-	return ..()
+	..()
+	var/datum/sui/ui = get_existing_sui_ui(user, ui_key)
+	if(current_camera)
+		store_feed_screen_state(user)
+		apply_visual(user)
+		prune_feed_screen(user)
+		ui?.set_show_map(TRUE, get_z(current_camera), 500, TRUE)
+	else
+		ui?.set_show_map(FALSE)
 
 /datum/nano_module/program/camera_monitor/sui_data(mob/user)
 	var/list/data = host.initial_data(program)
@@ -108,23 +128,24 @@
 			to_chat(ui.user, "Unable to establish a connection.")
 			return FALSE
 
-		switch_to_camera(ui.user, C)
+		if(!switch_to_camera(ui.user, C))
+			return FALSE
 		apply_visual(ui.user)
-		ui.set_show_map(TRUE, get_z(C), 500) // Show map embedded in SUI
+		prune_feed_screen(ui.user)
+		ui.set_show_map(TRUE, get_z(C), 500, TRUE) // Route the camera feed into the embedded SUI map control
 		return TRUE
 
 	if(action == "switch_network")
 		if(can_access_network(ui.user, get_camera_access(params["switch_network"])))
+			if(current_camera && !(params["switch_network"] in current_camera.network))
+				disconnect_camera_feed(ui.user, ui)
 			current_network = params["switch_network"]
 		else
 			to_chat(ui.user, "\The [nano_host()] shows an \"Network Access Denied\" error message.")
 		return TRUE
 
 	if(action == "reset")
-		reset_current()
-		remove_visual(ui.user)
-		ui.user.reset_view(current_camera)
-		ui.set_show_map(FALSE) // Hide map embedded in SUI
+		disconnect_camera_feed(ui.user, ui)
 		return TRUE
 
 	return FALSE
@@ -141,7 +162,10 @@
 		A.client.eye = A.eyeobj
 		return 1
 
+	store_feed_screen_state(user)
+	remove_visual(user)
 	set_current(C)
+	user.reset_view(C)
 	return 1
 
 /datum/nano_module/program/camera_monitor/proc/set_current(obj/machinery/camera/C)
@@ -181,6 +205,20 @@
 		reset_current()
 	return viewflag
 
+/datum/nano_module/program/camera_monitor/sui_update(mob/user, datum/sui/ui)
+	var/should_show = !!current_camera
+	if(should_show)
+		if(!ui.map_visible || ui.map_z_level != get_z(current_camera))
+			ui.set_show_map(TRUE, get_z(current_camera), 500, TRUE)
+		else if(ui.map_prefers_default_capture && !ui.captured_default_map)
+			ui.capture_default_map()
+		apply_visual(user)
+		prune_feed_screen(user)
+	else if(ui.map_visible || get_feed_screen_state(user))
+		disconnect_camera_feed(user, ui)
+
+	ui.push_data(sui_data(user))
+
 
 // ERT Variant of the program
 /datum/computer_file/program/camera_monitor/ert
@@ -211,4 +249,91 @@
 /datum/nano_module/program/camera_monitor/remove_visual(mob/M)
 	if(current_camera)
 		current_camera.remove_visual(M)
-	usr.client.reload_fov()
+	M?.client?.reload_fov()
+
+/datum/nano_module/program/camera_monitor/proc/get_feed_screen_state(mob/user)
+	if(!user)
+		return
+	return feed_screen_states["\ref[user]"]
+
+/datum/nano_module/program/camera_monitor/proc/store_feed_screen_state(mob/user)
+	if(!user?.client)
+		return
+
+	var/user_key = "\ref[user]"
+	if(feed_screen_states[user_key])
+		return
+
+	feed_screen_states[user_key] = list(
+		"user" = weakref(user),
+		"screen" = user.client.screen.Copy()
+	)
+
+/datum/nano_module/program/camera_monitor/proc/prune_feed_screen(mob/user)
+	if(!user?.client)
+		return
+
+	store_feed_screen_state(user)
+
+	var/list/kept_fullscreens = list()
+	for(var/category in user.screens)
+		var/obj/screen/fullscreen/screen = user.screens[category]
+		if(screen)
+			kept_fullscreens += screen
+
+	var/list/to_remove = list()
+	for(var/atom/movable/screen_atom as anything in user.client.screen)
+		if(!istype(screen_atom, /obj/screen))
+			continue
+		if(screen_atom in kept_fullscreens)
+			continue
+		to_remove += screen_atom
+
+	if(length(to_remove))
+		user.client.screen -= to_remove
+
+	user.reload_fullscreen()
+
+/datum/nano_module/program/camera_monitor/proc/restore_feed_screen(mob/user)
+	if(!user)
+		return
+
+	var/user_key = "\ref[user]"
+	var/list/state = feed_screen_states[user_key]
+	if(!islist(state))
+		return
+
+	feed_screen_states -= user_key
+	if(!user.client)
+		return
+
+	var/list/restored_screen = list()
+	var/list/snapshot = state["screen"]
+	if(islist(snapshot))
+		for(var/atom/movable/screen_atom as anything in snapshot)
+			if(!QDELETED(screen_atom))
+				restored_screen += screen_atom
+
+	user.client.screen = restored_screen
+	user.reload_fullscreen()
+
+/datum/nano_module/program/camera_monitor/proc/restore_all_feed_screens()
+	var/list/states = feed_screen_states.Copy()
+	for(var/user_key in states)
+		var/list/state = states[user_key]
+		var/weakref/user_ref = state["user"]
+		var/mob/user = user_ref?.resolve()
+		if(!user)
+			feed_screen_states -= user_key
+			continue
+		remove_visual(user)
+		user.reset_view(null)
+		restore_feed_screen(user)
+	feed_screen_states.Cut()
+
+/datum/nano_module/program/camera_monitor/proc/disconnect_camera_feed(mob/user, datum/sui/ui = null)
+	remove_visual(user)
+	reset_current()
+	user?.reset_view(null)
+	restore_feed_screen(user)
+	ui?.set_show_map(FALSE)

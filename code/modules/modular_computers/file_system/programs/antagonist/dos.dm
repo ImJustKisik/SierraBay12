@@ -32,17 +32,54 @@
 
 	..(forced)
 
+/datum/computer_file/program/ntnet_dos/proc/select_target_relay(relay_id)
+	target = null
+	for(var/obj/machinery/ntnet_relay/R in ntnet_global.relays)
+		if("[R.relay_id]" == relay_id)
+			target = R
+			break
+	return TRUE
+
+/datum/computer_file/program/ntnet_dos/proc/reset_attack()
+	if(target)
+		target.dos_sources.Remove(src)
+		target = null
+	executed = FALSE
+	error = ""
+	return TRUE
+
+/datum/computer_file/program/ntnet_dos/proc/execute_attack(mob/user)
+	if(!target)
+		return TRUE
+	executed = TRUE
+	target.dos_sources.Add(src)
+	operator_skill = user?.get_skill_value(SKILL_COMPUTER)
+
+	var/list/sources_to_show = list(computer.get_network_tag())
+	var/extra_to_show = 2 * max(operator_skill - SKILL_TRAINED, 0)
+	if(extra_to_show)
+		for(var/i = 1, i <= extra_to_show, i++)
+			var/nid = pick(ntnet_global.registered_nids)
+			var/datum/extension/interactive/ntos/os = ntnet_global.registered_nids[nid]
+			if(os.get_ntnet_status())
+				sources_to_show |= os.get_network_tag()
+
+	ntnet_global.add_log_with_ids_check("Excess traffic flood targeting Quantum Relay ([target.relay_id]) detected from [length(sources_to_show)] device\s: [english_list(sources_to_show)]")
+	return TRUE
+
 /datum/nano_module/program/computer_dos
 	name = "DoS Traffic Generator"
+	sui_interface_name = "ComputerDos"
+	sui_width = 400
+	sui_height = 250
 
-/datum/nano_module/program/computer_dos/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/computer_dos/proc/build_dos_data(mob/user)
 	if(!ntnet_global)
-		return
+		return list()
 	var/datum/computer_file/program/ntnet_dos/PRG = program
-	var/list/data = list()
 	if(!istype(PRG))
-		return
-	data = PRG.get_header_data()
+		return list()
+	var/list/data = PRG.get_header_data()
 
 	if(PRG.error)
 		data["error"] = PRG.error
@@ -68,6 +105,28 @@
 		data["relays"] = relays
 		data["focus"] = PRG.target ? PRG.target.relay_id : null
 
+	return data
+
+/datum/nano_module/program/computer_dos/sui_data(mob/user)
+	return build_dos_data(user)
+
+/datum/nano_module/program/computer_dos/sui_act(action, list/params, datum/sui/ui)
+	var/datum/computer_file/program/ntnet_dos/PRG = program
+	if(!istype(PRG))
+		return FALSE
+	if(action == "target_relay")
+		return PRG.select_target_relay(params["relay_id"])
+	if(action == "reset")
+		return PRG.reset_attack()
+	if(action == "execute")
+		return PRG.execute_attack(ui?.user)
+	return FALSE
+
+/datum/nano_module/program/computer_dos/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_dos_data(user)
+	if(!length(data))
+		return
+
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
 		ui = new(user, src, ui_key, "ntnet_dos.tmpl", "DoS Traffic Generator", 400, 250, state = state)
@@ -80,32 +139,11 @@
 	if(..())
 		return TOPIC_HANDLED
 	if(href_list["PRG_target_relay"])
-		for(var/obj/machinery/ntnet_relay/R in ntnet_global.relays)
-			if("[R.relay_id]" == href_list["PRG_target_relay"])
-				target = R
+		select_target_relay(href_list["PRG_target_relay"])
 		return TOPIC_HANDLED
 	if(href_list["PRG_reset"])
-		if(target)
-			target.dos_sources.Remove(src)
-			target = null
-		executed = FALSE
-		error = ""
+		reset_attack()
 		return TOPIC_HANDLED
 	if(href_list["PRG_execute"])
-		if(!target)
-			return TOPIC_HANDLED
-		executed = TRUE
-		target.dos_sources.Add(src)
-		operator_skill = usr.get_skill_value(SKILL_COMPUTER)
-
-		var/list/sources_to_show = list(computer.get_network_tag())
-		var/extra_to_show = 2 * max(operator_skill - SKILL_TRAINED, 0)
-		if(extra_to_show)
-			for(var/i = 1, i <= extra_to_show, i++)
-				var/nid = pick(ntnet_global.registered_nids)
-				var/datum/extension/interactive/ntos/os = ntnet_global.registered_nids[nid]
-				if(os.get_ntnet_status())
-					sources_to_show |= os.get_network_tag()
-
-		ntnet_global.add_log_with_ids_check("Excess traffic flood targeting Quantum Relay ([target.relay_id]) detected from [length(sources_to_show)] device\s: [english_list(sources_to_show)]")
-		return TRUE
+		execute_attack(usr)
+		return TOPIC_HANDLED

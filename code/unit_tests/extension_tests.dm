@@ -392,6 +392,9 @@
 	var/auto_update_calls = 0
 	var/list/last_open_data = list()
 	var/list/last_push_data = list()
+	var/last_map_state = FALSE
+	var/last_map_z
+	var/last_map_height = 0
 
 /datum/sui/unit_test_sui_mock/open(list/initial_data)
 	open_count++
@@ -407,6 +410,12 @@
 /datum/sui/unit_test_sui_mock/set_auto_update(nstate = TRUE)
 	auto_update_calls++
 	is_auto_updating = nstate
+	return
+
+/datum/sui/unit_test_sui_mock/set_show_map(nstate, nz, map_height = 256)
+	last_map_state = !!nstate
+	last_map_z = nz
+	last_map_height = map_height
 	return
 
 /datum/sui/unit_test_sui_mock/check_status()
@@ -561,7 +570,29 @@
 		list("interface" = "WordProcessor", "module" = /datum/nano_module/program/computer_wordprocessor),
 		list("interface" = "NTNetDownloader", "module" = /datum/nano_module/program/computer_ntnetdownload),
 		list("interface" = "NTTransfer", "module" = /datum/nano_module/program/computer_nttransfer),
-		list("interface" = "Newscast", "module" = /datum/nano_module/program/newscast)
+		list("interface" = "Newscast", "module" = /datum/nano_module/program/newscast),
+		list("interface" = "AccessDecrypter", "module" = /datum/nano_module/program/access_decrypter),
+		list("interface" = "ComputerDos", "module" = /datum/nano_module/program/computer_dos),
+		list("interface" = "Revelation", "module" = /datum/nano_module/program/revelation),
+		list("interface" = "ComputerConfigurator", "module" = /datum/nano_module/program/computer_configurator),
+		list("interface" = "Docking", "module" = /datum/nano_module/program/docking),
+		list("interface" = "ArcadeClassic", "module" = /datum/nano_module/program/arcade_classic),
+		list("interface" = "Scanner", "module" = /datum/nano_module/program/scanner),
+		list("interface" = "AIDiag", "module" = /datum/nano_module/program/computer_aidiag),
+		list("interface" = "NTNetMonitor", "module" = /datum/nano_module/program/computer_ntnetmonitor),
+		list("interface" = "ForceAuthorization", "module" = /datum/nano_module/program/forceauthorization),
+		list("interface" = "EngineControl", "module" = /datum/nano_module/program/ship/engine_control),
+		list("interface" = "PowerMonitor", "module" = /datum/nano_module/program/power_monitor),
+		list("interface" = "AlarmMonitor", "module" = /datum/nano_module/program/alarm_monitor/engineering),
+		list("interface" = "AtmosControl", "module" = /datum/nano_module/program/atmos_control),
+		list("interface" = "Rcon", "module" = /datum/nano_module/program/rcon),
+		list("interface" = "ShieldsMonitor", "module" = /datum/nano_module/program/shields_monitor),
+		list("interface" = "SupermatterMonitor", "module" = /datum/nano_module/program/supermatter_monitor),
+		list("interface" = "CrewMonitor", "module" = /datum/nano_module/program/crew_monitor),
+		list("interface" = "ShipSensors", "module" = /datum/nano_module/program/ship/sensors),
+		list("interface" = "CrewManifest", "module" = /datum/nano_module/program/crew_manifest),
+		list("interface" = "CameraMonitor", "module" = /datum/nano_module/program/camera_monitor),
+		list("interface" = "CameraMonitor", "module" = /datum/nano_module/program/camera_monitor/hacked)
 	)
 
 	for(var/list/entry in migrated)
@@ -623,6 +654,95 @@
 
 /atom/movable/unit_test_sui_status_host/CanUseTopic(mob/user, datum/topic_state/state = GLOB.default_state)
 	return current_status
+
+/datum/unit_test/sui_power_monitor_actions_shall_update_selection
+	name = "SUI - power monitor actions shall update selection"
+
+/datum/unit_test/sui_power_monitor_actions_shall_update_selection/start_test()
+	var/datum/unit_test_sui_host/host = new()
+	var/datum/nano_module/program/power_monitor/module = new(host, null, null)
+	var/number_of_failures = 0
+
+	module.sui_act("select_sensor", list("sensor" = "Grid-A"), null)
+	if(module.active_sensor != "Grid-A")
+		log_bad("Expected power monitor to store selected sensor.")
+		number_of_failures++
+
+	module.sui_act("clear", list(), null)
+	if(!isnull(module.active_sensor))
+		log_bad("Expected power monitor clear action to reset active sensor.")
+		number_of_failures++
+
+	qdel(module)
+	qdel(host)
+
+	if(number_of_failures)
+		fail("[number_of_failures] failed assertion\s.")
+	else
+		pass("All assertions passed.")
+	return TRUE
+
+/datum/unit_test/sui_supermatter_monitor_actions_shall_switch_screen
+	name = "SUI - supermatter monitor actions shall switch screens"
+
+/datum/unit_test/sui_supermatter_monitor_actions_shall_switch_screen/start_test()
+	var/datum/unit_test_sui_host/host = new()
+	var/datum/nano_module/program/supermatter_monitor/module = new(host, null, null)
+	var/number_of_failures = 0
+
+	module.sui_act("screen", list("screen" = SM_MONITOR_SCREEN_THRESHHOLDS), null)
+	if(module.screen != SM_MONITOR_SCREEN_THRESHHOLDS)
+		log_bad("Expected supermatter monitor to switch to threshholds screen.")
+		number_of_failures++
+
+	module.sui_act("clear", list(), null)
+	if(module.screen != SM_MONITOR_SCREEN_MAIN)
+		log_bad("Expected clear action to restore main screen.")
+		number_of_failures++
+
+	qdel(module)
+	qdel(host)
+
+	if(number_of_failures)
+		fail("[number_of_failures] failed assertion\s.")
+	else
+		pass("All assertions passed.")
+	return TRUE
+
+/datum/unit_test/sui_crew_monitor_actions_shall_drive_map_state
+	name = "SUI - crew monitor actions shall drive map state"
+
+/datum/unit_test/sui_crew_monitor_actions_shall_drive_map_state/start_test()
+	var/datum/unit_test_sui_host/host = new()
+	var/datum/nano_module/program/crew_monitor/module = new(host, null, null)
+	var/datum/sui/unit_test_sui_mock/ui = new(null, module, "CrewMonitor", "Crew Monitor")
+	var/number_of_failures = 0
+
+	module.sui_act("set_map_z", list("z_level" = "2"), ui)
+	if(module.map_z_level != 2)
+		log_bad("Expected crew monitor map z-level to update to 2.")
+		number_of_failures++
+	if(!ui.last_map_state || ui.last_map_z != 2)
+		log_bad("Expected crew monitor to request visible map at z-level 2.")
+		number_of_failures++
+
+	module.sui_act("toggle_map", list(), ui)
+	if(module.map_enabled)
+		log_bad("Expected crew monitor toggle_map action to disable the map.")
+		number_of_failures++
+	if(ui.last_map_state)
+		log_bad("Expected crew monitor to hide the map after toggle.")
+		number_of_failures++
+
+	qdel(ui)
+	qdel(module)
+	qdel(host)
+
+	if(number_of_failures)
+		fail("[number_of_failures] failed assertion\s.")
+	else
+		pass("All assertions passed.")
+	return TRUE
 
 /datum/sui/unit_test_status_probe
 	var/config_update_calls = 0

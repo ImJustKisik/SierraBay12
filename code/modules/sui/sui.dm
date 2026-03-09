@@ -57,6 +57,22 @@ Usage in DM:
 	var/list/last_data
 	// Whether BYOND map child control is currently shown
 	var/map_visible = FALSE
+	// Last requested Z-level for embedded BYOND map control
+	var/map_z_level = 0
+	// Whether this UI wants the embedded map control to become the default render target
+	var/map_prefers_default_capture = FALSE
+	// Whether this UI currently owns the client's default map control
+	var/captured_default_map = FALSE
+	// Per-client capture ownership to avoid stomping restore logic between windows
+	var/static/list/client_map_capture_owners = list()
+	// Last known browser-local bounds for an embedded map panel
+	var/map_panel_x = 0
+	var/map_panel_y = 0
+	var/map_panel_width = 0
+	var/map_panel_bounds_ready = FALSE
+	// Last known live browser viewport size reported by JS
+	var/window_client_width = 0
+	var/window_client_height = 0
 	// Last requested BYOND map panel height
 	var/map_panel_height = 256
 	// Prevent reentrant close/destroy paths
@@ -102,6 +118,7 @@ Usage in DM:
 /datum/sui/Destroy()
 	if(is_open)
 		run_on_close_callback(user?.client)
+	release_default_map()
 	if(is_open && !is_closing)
 		is_closing = TRUE
 		is_auto_updating = FALSE
@@ -167,27 +184,109 @@ Usage in DM:
  * @param nstate boolean TRUE to show map, FALSE to hide
  * @param nz int Z-level to display on the map (default: src_object z-level)
  * @param map_height int Height of the map element in pixels (default: 256)
+ * @param capture_default bool/null TRUE to route world rendering into this map control
  */
-/datum/sui/proc/set_show_map(nstate, nz, map_height = 256)
+/datum/sui/proc/set_show_map(nstate, nz, map_height = 256, capture_default = null)
 	if(!user?.client)
 		return
+
+	if(!isnull(capture_default))
+		map_prefers_default_capture = !!capture_default
+
 	map_visible = !!nstate
-	if(map_visible)
+	map_z_level = nz || get_z(src_object.nano_host())
+	if(map_visible && !map_panel_bounds_ready)
 		map_panel_height = map_height
 	if(nstate)
-		var/zl = nz || get_z(src_object.nano_host())
-		// Resize the browser element to make room for the map
-		winset(user, "[window_id].browser", "size=[width]x[height - map_height];pos=0,0;anchor1=0,0;anchor2=100,0")
-		// Create/show the map element
-		winset(user, "[window_id].sui_map", "parent=[window_id];type=map;pos=0,[height - map_height];size=[width]x[map_height];anchor1=0,100;anchor2=100,100;zoom=0")
-		winset(user, "[window_id].sui_map", "focus=true")
-		if(zl)
-			winset(user, "[window_id].sui_map", "view=[zl]")
+		apply_map_layout()
+		if(map_prefers_default_capture)
+			capture_default_map()
+		else
+			release_default_map(FALSE)
 	else
+		release_default_map()
+		map_prefers_default_capture = FALSE
 		// Hide the map element and restore browser to full size
 		winset(user, "[window_id].sui_map", "parent=;type=map")
-		winset(user, "[window_id].browser", "size=[width]x[height];pos=0,0;anchor1=0,0;anchor2=100,100")
+		winset(user, "[window_id].browser", "size=0x0;pos=0,0;anchor1=0,0;anchor2=100,100")
 	send_config_update()
+
+/datum/sui/proc/set_map_panel_bounds(nx, ny, nwidth, nheight, nwindow_width = null, nwindow_height = null)
+	var/new_window_width = max(round(text2num("[nwindow_width]")), 0)
+	var/new_window_height = max(round(text2num("[nwindow_height]")), 0)
+	var/window_size_changed = FALSE
+	if(new_window_width)
+		window_size_changed = window_size_changed || window_client_width != new_window_width
+		window_client_width = new_window_width
+	if(new_window_height)
+		window_size_changed = window_size_changed || window_client_height != new_window_height
+		window_client_height = new_window_height
+
+	var/new_x = max(round(text2num("[nx]")), 0)
+	var/new_y = max(round(text2num("[ny]")), 0)
+	var/new_width = max(round(text2num("[nwidth]")), 1)
+	var/new_height = max(round(text2num("[nheight]")), 1)
+
+	var/changed = !map_panel_bounds_ready \
+		|| window_size_changed \
+		|| map_panel_x != new_x \
+		|| map_panel_y != new_y \
+		|| map_panel_width != new_width \
+		|| map_panel_height != new_height
+
+	map_panel_x = new_x
+	map_panel_y = new_y
+	map_panel_width = new_width
+	map_panel_height = new_height
+	map_panel_bounds_ready = TRUE
+
+	if(changed && map_visible)
+		apply_map_layout()
+
+/datum/sui/proc/apply_map_layout()
+	if(!user?.client || !map_visible)
+		return
+
+	if(map_panel_bounds_ready && map_panel_width > 0 && map_panel_height > 0)
+		// Keep the browser full-size and place the map control over the measured panel bounds.
+		winset(user, "[window_id].browser", "size=0x0;pos=0,0;anchor1=0,0;anchor2=100,100")
+		winset(user, "[window_id].sui_map", "parent=[window_id];type=map;pos=[map_panel_x],[map_panel_y];size=[map_panel_width]x[map_panel_height];anchor1=0,0;anchor2=0,0;zoom=0;is-disabled=true")
+	else
+		// Fallback for interfaces that have not yet reported an embedded panel rect.
+		var/fallback_height = max((window_client_height || height) - map_panel_height, 0)
+		winset(user, "[window_id].browser", "size=0x[fallback_height];pos=0,0;anchor1=0,0;anchor2=100,0")
+		winset(user, "[window_id].sui_map", "parent=[window_id];type=map;pos=0,0;size=0x[map_panel_height];anchor1=0,100;anchor2=100,100;zoom=0;is-disabled=true")
+
+	winset(user, "[window_id].browser", "focus=true")
+
+/datum/sui/proc/capture_default_map()
+	if(!user?.client || !map_visible)
+		return
+
+	var/client_key = "\ref[user.client]"
+	var/datum/sui/current_owner = client_map_capture_owners[client_key]
+	if(current_owner && current_owner != src)
+		current_owner.captured_default_map = FALSE
+		if(current_owner.user == user)
+			winset(user, "[current_owner.window_id].sui_map", "is-default=false")
+
+	client_map_capture_owners[client_key] = src
+	captured_default_map = TRUE
+	winset(user, "mapwindow.map", "is-default=false")
+	winset(user, "[window_id].sui_map", "is-default=true;is-disabled=true")
+	winset(user, "[window_id].browser", "focus=true")
+
+/datum/sui/proc/release_default_map(restore_main = TRUE)
+	if(user?.client)
+		winset(user, "[window_id].sui_map", "is-default=false;is-disabled=false")
+
+	var/client_key = user?.client ? "\ref[user.client]" : null
+	if(client_key && client_map_capture_owners[client_key] == src)
+		client_map_capture_owners -= client_key
+		if(user?.client && restore_main)
+			winset(user, "mapwindow.map", "is-default=true;focus=true")
+
+	captured_default_map = FALSE
 
 /**
  * Build config payload sent to frontend.
@@ -202,7 +301,8 @@ Usage in DM:
 		"frameless" = is_frameless,
 		"window_id" = window_id,
 		"map_visible" = map_visible,
-		"map_height" = map_panel_height
+		"map_height" = map_panel_height,
+		"shell_lock_scroll" = map_visible && map_prefers_default_capture
 	)
 
 /**
@@ -309,7 +409,7 @@ Usage in DM:
 
 	return rewrite_assets_v2({"
 <!DOCTYPE html>
-<html>
+<html style='width:100%;height:100%;'>
 	<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 	<head>
 		<meta http-equiv="X-UA-Compatible" content="IE=edge">
@@ -332,9 +432,9 @@ Usage in DM:
 		</script>
 		[head_content]
 	</head>
-	<body scroll=auto data-sui-interface='[interface]' data-sui-window-mode='[is_frameless ? "frameless" : "default"]' data-url-parameters='[url_parameters_json]' data-initial-data='[initial_data_json]'>
+	<body scroll=auto style='margin:0;width:100%;min-height:100%;box-sizing:border-box;' data-sui-interface='[interface]' data-sui-window-mode='[is_frameless ? "frameless" : "default"]' data-url-parameters='[url_parameters_json]' data-initial-data='[initial_data_json]'>
 		[ui_loading_shell(title, "Mounting reactive control surface")]
-		<div id='sui-root'></div>
+		<div id='sui-root' style='width:100%;min-height:100%;box-sizing:border-box;'></div>
 		<noscript>
 			<div style='text-align:center;margin-top:50px;'>
 				<h2>JAVASCRIPT REQUIRED</h2>
@@ -386,8 +486,13 @@ Usage in DM:
 	last_data = initial_data
 	show_browser(user, get_html(initial_data), "window=[window_id];[window_size][window_options]")
 	asset_v2_debug("sui open browse window=[window_id] interface=[interface]", user.client)
+	winset(user, "[window_id].browser", "size=0x0;pos=0,0;anchor1=0,0;anchor2=100,100")
 	winset(user, "mapwindow.map", "focus=true")
 	on_close_winset()
+	if(map_visible)
+		apply_map_layout()
+		if(map_prefers_default_capture)
+			capture_default_map()
 
 	is_open = TRUE
 	SSnano.sui_opened(src)
@@ -425,8 +530,13 @@ Usage in DM:
 		window_size = "size=[width]x[height];"
 
 	show_browser(user, get_html(last_data), "window=[window_id];[window_size][window_options]")
+	winset(user, "[window_id].browser", "size=0x0;pos=0,0;anchor1=0,0;anchor2=100,100")
 	winset(user, "mapwindow.map", "focus=true")
 	on_close_winset()
+	if(map_visible)
+		apply_map_layout()
+		if(map_prefers_default_capture)
+			capture_default_map()
 
 /**
  * Close the UI
@@ -441,6 +551,7 @@ Usage in DM:
 		run_on_close_callback(user?.client)
 		is_open = FALSE
 		SSnano.sui_closed(src)
+	release_default_map()
 	// Cascade close to children
 	for(var/datum/sui/child in children)
 		child.master_ui = null
@@ -465,6 +576,34 @@ Usage in DM:
 		C.Topic(href, params2list(href), ref)
 	if(on_close_logic && C.mob)
 		C.mob.unset_machine()
+
+/datum/sui/proc/handle_builtin_action(action, mob/user, list/params = null)
+	if(action == "__close")
+		close()
+		return TRUE
+
+	if(action == "__sync_map_panel")
+		set_map_panel_bounds(params?["x"], params?["y"], params?["width"], params?["height"], params?["window_width"], params?["window_height"])
+		return TRUE
+
+	if(!istype(src_object, /datum/nano_module/program))
+		return FALSE
+
+	var/datum/nano_module/program/module = src_object
+	var/datum/computer_file/program/program = module.program
+	var/datum/extension/interactive/ntos/computer = program?.computer
+	if(!program || !computer)
+		return FALSE
+
+	switch(action)
+		if("__pc_minimize")
+			computer.minimize_program(program, user)
+			return TRUE
+		if("__pc_exit")
+			computer.kill_program_remote(program, FALSE, user)
+			return TRUE
+
+	return FALSE
 
 /**
  * Set up onclose handler
@@ -527,8 +666,7 @@ Usage in DM:
 	if(!action)
 		return
 
-	if(action == "__close")
-		close()
+	if(handle_builtin_action(action, user, href_list))
 		return
 
 	// Remove internal params before passing to sui_act

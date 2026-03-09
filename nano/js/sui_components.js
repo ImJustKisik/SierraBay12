@@ -11,6 +11,8 @@
     'use strict'
 
     var h = SUI.h
+    var useEffect = SUI.useEffect
+    var useRef = SUI.useRef
 
     // ============================================================
     // Button
@@ -163,6 +165,8 @@
     // MapPanel - reusable shell for DM-managed map windows
     // ============================================================
     function MapPanel(props) {
+        var viewportRef = useRef(null)
+        var lastRectRef = useRef(null)
         var active = !!props.active
         var toolbar = props.toolbar
         var activeMessage = props.activeMessage || 'Map feed active.'
@@ -193,11 +197,118 @@
             alignItems: 'center',
             justifyContent: 'center',
             textAlign: 'center',
-            padding: '12px'
+            padding: '12px',
+            position: 'relative',
+            overflow: 'hidden',
+            boxSizing: 'border-box'
         }
         var viewportChildren = active
             ? (props.activeContent || activeMessage)
             : (props.inactiveContent || inactiveMessage)
+
+        function getUiPixelScale() {
+            if (typeof window.devicePixelRatio === 'number' && window.devicePixelRatio > 0.5) {
+                return window.devicePixelRatio
+            }
+
+            if (window.screen && window.screen.deviceXDPI && window.screen.logicalXDPI) {
+                var legacyRatio = window.screen.deviceXDPI / window.screen.logicalXDPI
+                if (legacyRatio > 0.5) {
+                    return legacyRatio
+                }
+            }
+
+            return 1
+        }
+
+        function syncBounds() {
+            if (props.syncBounds === false || !viewportRef.current || typeof SUI.act !== 'function') {
+                return
+            }
+
+            var rect = viewportRef.current.getBoundingClientRect()
+            var scale = getUiPixelScale()
+            var documentElement = document.documentElement || {}
+            var body = document.body || {}
+            var viewportWidth = window.innerWidth || documentElement.clientWidth || body.clientWidth || rect.right
+            var viewportHeight = window.innerHeight || documentElement.clientHeight || body.clientHeight || rect.bottom
+            var nextRect = {
+                x: Math.round(rect.left * scale),
+                y: Math.round(rect.top * scale),
+                width: Math.ceil(rect.width * scale),
+                height: Math.ceil(rect.height * scale),
+                window_width: Math.ceil(viewportWidth * scale),
+                window_height: Math.ceil(viewportHeight * scale)
+            }
+
+            if (nextRect.width <= 0 || nextRect.height <= 0) {
+                return
+            }
+
+            var lastRect = lastRectRef.current
+            if (lastRect
+                && lastRect.x === nextRect.x
+                && lastRect.y === nextRect.y
+                && lastRect.width === nextRect.width
+                && lastRect.height === nextRect.height
+                && lastRect.window_width === nextRect.window_width
+                && lastRect.window_height === nextRect.window_height) {
+                return
+            }
+
+            lastRectRef.current = nextRect
+            SUI.act('__sync_map_panel', nextRect)
+        }
+
+        useEffect(function () {
+            var scheduledSync = 0
+            function requestSync() {
+                if (scheduledSync) {
+                    return
+                }
+                if (window.requestAnimationFrame) {
+                    scheduledSync = window.requestAnimationFrame(function () {
+                        scheduledSync = 0
+                        syncBounds()
+                    })
+                    return
+                }
+                scheduledSync = window.setTimeout(function () {
+                    scheduledSync = 0
+                    syncBounds()
+                }, 0)
+            }
+
+            var firstTimer = window.setTimeout(requestSync, 0)
+            var secondTimer = window.setTimeout(requestSync, 100)
+            var interval = window.setInterval(syncBounds, 500)
+
+            function handleResize() {
+                requestSync()
+            }
+
+            function handleScroll() {
+                requestSync()
+            }
+
+            window.addEventListener('resize', handleResize)
+            document.addEventListener('scroll', handleScroll, true)
+
+            return function () {
+                window.clearTimeout(firstTimer)
+                window.clearTimeout(secondTimer)
+                window.clearInterval(interval)
+                window.removeEventListener('resize', handleResize)
+                document.removeEventListener('scroll', handleScroll, true)
+                if (scheduledSync) {
+                    if (window.cancelAnimationFrame && window.requestAnimationFrame) {
+                        window.cancelAnimationFrame(scheduledSync)
+                    } else {
+                        window.clearTimeout(scheduledSync)
+                    }
+                }
+            }
+        }, [])
 
         return h('div', {
             class: props.className || props.class || null,
@@ -212,7 +323,11 @@
                     flexWrap: 'wrap'
                 }
             }, toolbar) : null,
-            h('div', { style: viewportStyle }, viewportChildren),
+            h('div', {
+                ref: viewportRef,
+                style: viewportStyle,
+                'data-sui-map-panel': 'true'
+            }, viewportChildren),
             props.children || null,
             hint ? h('div', {
                 style: {
@@ -303,18 +418,33 @@
     // ============================================================
 
     // Drag state (module-level, shared by all WindowChrome instances)
-    var _drag = { active: false, startX: 0, startY: 0, winX: 0, winY: 0 }
+    var _drag = { active: false, moved: false, startX: 0, startY: 0, winX: 0, winY: 0 }
+
+    function _readWindowCoord(primaryKey, fallbackKey) {
+        var primary = window[primaryKey]
+        if (typeof primary === 'number' && !isNaN(primary)) {
+            return primary
+        }
+
+        var fallback = window[fallbackKey]
+        if (typeof fallback === 'number' && !isNaN(fallback)) {
+            return fallback
+        }
+
+        return 0
+    }
 
     function _initDrag(e) {
         if (e.button !== 0) return // left button only
         e.preventDefault()
         _drag.active = true
+        _drag.moved = false
         _drag.startX = e.screenX
         _drag.startY = e.screenY
 
         // In BYOND/IE, screenLeft/Top gives the absolute monitor position
-        _drag.winX = window.screenLeft || window.screenX || 0
-        _drag.winY = window.screenTop || window.screenY || 0
+        _drag.winX = _readWindowCoord('screenLeft', 'screenX')
+        _drag.winY = _readWindowCoord('screenTop', 'screenY')
 
         document.addEventListener('mousemove', _onDragMove, true)
         document.addEventListener('mouseup', _onDragEnd, true)
@@ -325,6 +455,10 @@
         e.preventDefault()
         var dx = e.screenX - _drag.startX
         var dy = e.screenY - _drag.startY
+        if (!_drag.moved && Math.abs(dx) < 3 && Math.abs(dy) < 3) {
+            return
+        }
+        _drag.moved = true
         var nx = _drag.winX + dx
         var ny = _drag.winY + dy
 
@@ -338,6 +472,7 @@
 
     function _onDragEnd(e) {
         _drag.active = false
+        _drag.moved = false
         document.removeEventListener('mousemove', _onDragMove, true)
         document.removeEventListener('mouseup', _onDragEnd, true)
     }
@@ -871,18 +1006,23 @@
         var align = props.align || (vertical ? 'stretch' : 'center')
         var justify = props.justify || 'flex-start'
         var wrap = props.wrap
+        var style = {
+            display: 'flex',
+            flexDirection: vertical ? 'column' : 'row',
+            gap: gap,
+            alignItems: align,
+            justifyContent: justify,
+            flexWrap: wrap ? 'wrap' : 'nowrap',
+            width: fill ? '100%' : 'auto',
+            boxSizing: 'border-box'
+        }
+
+        if (props.style) {
+            for (var styleKey in props.style) style[styleKey] = props.style[styleKey]
+        }
 
         return h('div', {
-            style: {
-                display: 'flex',
-                flexDirection: vertical ? 'column' : 'row',
-                gap: gap,
-                alignItems: align,
-                justifyContent: justify,
-                flexWrap: wrap ? 'wrap' : 'nowrap',
-                width: fill ? '100%' : 'auto',
-                boxSizing: 'border-box'
-            },
+            style: style,
             class: props.className || null
         }, props.children)
     }
