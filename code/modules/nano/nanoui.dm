@@ -6,6 +6,38 @@ nanoui class (or whatever Byond calls classes)
 nanoui is used to open and update nano browser uis
 **********************************************************/
 
+GLOBAL_VAR_AS(nanoui_use_sui_compat, FALSE)
+
+/proc/nanoui_compat_skip_script(filename)
+	switch(lowertext("[filename]"))
+		if("libraries.min.js")
+			return TRUE
+		if("morphdom.min.js")
+			return TRUE
+		if("nano_utility.js")
+			return TRUE
+		if("nano_template.js")
+			return TRUE
+		if("nano_state_manager.js")
+			return TRUE
+		if("nano_state.js")
+			return TRUE
+		if("nano_state_default.js")
+			return TRUE
+		if("nano_base_callbacks.js")
+			return TRUE
+		if("nano_base_helpers.js")
+			return TRUE
+	return FALSE
+
+/proc/nanoui_compat_skip_stylesheet(filename)
+	switch(lowertext("[filename]"))
+		if("shared.css")
+			return TRUE
+		if("icons.css")
+			return TRUE
+	return FALSE
+
 /datum/nanoui
 	// the user who opened this ui
 	var/mob/user
@@ -60,6 +92,10 @@ nanoui is used to open and update nano browser uis
 	var/datum/nanoui/master_ui
 	var/list/datum/nanoui/children = list()
 	var/datum/topic_state/state = null
+	// Internal SUI bridge used when NanoUI compatibility mode is enabled.
+	var/datum/sui/nanocompat/compat_ui
+	var/compat_revision = 0
+	var/list/compat_last_data = null
 
  /**
   * Create a new nanoui instance.
@@ -107,9 +143,15 @@ nanoui is used to open and update nano browser uis
 
 //Do not qdel nanouis. Use close() instead.
 /datum/nanoui/Destroy()
+	if(compat_ui)
+		var/datum/sui/nanocompat/compat = compat_ui
+		compat_ui = null
+		compat.owner = null
+		compat.close()
 	user = null
 	src_object = null
 	state = null
+	compat_last_data = null
 	. = ..()
 
  /**
@@ -140,12 +182,12 @@ nanoui is used to open and update nano browser uis
   */
 /datum/nanoui/proc/set_status(state, push_update)
 	if (state != status) // Only update if it is different
+		status = state
+		sync_sui_compat_window()
 		if (status == STATUS_DISABLED)
-			status = state
 			if (push_update)
 				update()
 		else
-			status = state
 			if (push_update || status == 0)
 				push_data(null, 1) // Update the UI, force the update in case the status is 0, data is null so that previous data is used
 
@@ -200,6 +242,8 @@ nanoui is used to open and update nano browser uis
   */
 /datum/nanoui/proc/set_initial_data(list/data)
 	initial_data = data
+	if(!isnull(data))
+		compat_last_data = data
 
  /**
   * Get config data to sent to the ui.
@@ -251,6 +295,7 @@ nanoui is used to open and update nano browser uis
   */
 /datum/nanoui/proc/set_window_options(nwindow_options)
 	window_options = nwindow_options
+	sync_sui_compat_window()
 
  /**
   * Add a CSS stylesheet to this UI
@@ -375,6 +420,162 @@ nanoui is used to open and update nano browser uis
   */
 /datum/nanoui/proc/use_on_close_logic(state)
 	on_close_logic = state
+	sync_sui_compat_window()
+
+/datum/nanoui/proc/should_use_sui_compat()
+	return GLOB.nanoui_use_sui_compat
+
+/datum/nanoui/nano_host()
+	return src_object?.nano_host()
+
+/datum/nanoui/proc/sync_sui_compat_window()
+	if(!compat_ui)
+		return
+	compat_ui.user = user
+	compat_ui.title = title
+	compat_ui.width = width ? width : compat_ui.width
+	compat_ui.height = height ? height : compat_ui.height
+	compat_ui.ui_key = ui_key
+	compat_ui.window_id = window_id
+	compat_ui.ref = ref
+	compat_ui.state = state
+	compat_ui.on_close_logic = on_close_logic
+	compat_ui.status = status
+	compat_ui.set_window_options(window_options)
+
+/datum/nanoui/proc/get_sui_compat_master_ui()
+	return should_use_sui_compat() ? master_ui?.compat_ui : null
+
+/datum/nanoui/proc/create_sui_compat_ui()
+	var/datum/sui/nanocompat/new_ui = new(user, src, "NanoCompat", title, width ? width : 400, height ? height : 500, ref, get_sui_compat_master_ui(), state, ui_key)
+	new_ui.owner = src
+	compat_ui = new_ui
+	sync_sui_compat_window()
+	return compat_ui
+
+/datum/nanoui/proc/get_sui_compat_script_assets()
+	. = list()
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+	for(var/filename in scripts)
+		if(nanoui_compat_skip_script(filename))
+			continue
+		var/logical_id = asset_registry_v2.ensure_nanoui_filename_registered(filename)
+		. += list(list(
+			"name" = filename,
+			"url" = logical_id ? asset_registry_v2.resolve_key(logical_id, filename) : filename
+		))
+
+/datum/nanoui/proc/get_sui_compat_stylesheet_assets()
+	. = list()
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+	for(var/filename in stylesheets)
+		if(nanoui_compat_skip_stylesheet(filename))
+			continue
+		var/logical_id = asset_registry_v2.ensure_nanoui_filename_registered(filename)
+		. += list(list(
+			"name" = filename,
+			"url" = logical_id ? asset_registry_v2.resolve_key(logical_id, filename) : filename
+		))
+
+/datum/nanoui/proc/get_sui_compat_template_assets()
+	. = list()
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+	for(var/key in templates)
+		var/template_filename = templates[key]
+		var/logical_id = asset_registry_v2.ensure_nanoui_filename_registered(template_filename)
+		.[key] = list(
+			"name" = template_filename,
+			"url" = logical_id ? asset_registry_v2.resolve_key(logical_id, template_filename) : template_filename
+		)
+
+/datum/nanoui/proc/get_sui_compat_payload(list/data = null, advance_revision = TRUE)
+	var/list/effective_data = !isnull(data) ? data : compat_last_data
+	if(isnull(effective_data))
+		effective_data = initial_data
+	if(!isnull(effective_data))
+		compat_last_data = effective_data
+	if(advance_revision)
+		compat_revision++
+
+	var/list/config_data = get_config_data()
+	config_data["layoutKey"] = layout_key
+	config_data["layoutHeaderKey"] = layout_header_key
+	config_data["stateKey"] = state_key
+	config_data["windowOptions"] = window_options
+	config_data["windowId"] = window_id
+	config_data["uiKey"] = ui_key
+	config_data["assetDeliveryMode"] = "sui_compat"
+
+	return list(
+		"assets" = list(
+			"templates" = get_sui_compat_template_assets(),
+			"stylesheets" = get_sui_compat_stylesheet_assets(),
+			"scripts" = get_sui_compat_script_assets()
+		),
+		"config" = config_data,
+		"data" = !isnull(effective_data) ? effective_data : list(),
+		"initial_data" = !isnull(initial_data) ? initial_data : list(),
+		"revision" = compat_revision
+	)
+
+/datum/nanoui/sui_data(mob/user)
+	return get_sui_compat_payload(null, FALSE)
+
+/datum/nanoui/proc/ensure_sui_compat_open()
+	if(!compat_ui || QDELETED(compat_ui))
+		create_sui_compat_ui()
+	else
+		sync_sui_compat_window()
+	return compat_ui
+
+/datum/nanoui/proc/build_compat_href(list/href_list)
+	var/list/query_parts = list("?src=\ref[src]")
+	for(var/key in href_list)
+		query_parts += ";[key]=[href_list[key]]"
+	return jointext(query_parts, "")
+
+/datum/nanoui/proc/handle_topic_action(href, list/href_list)
+	// This is used to toggle the nano map ui
+	var/map_update = 0
+	if(href_list["showMap"])
+		set_show_map(text2num(href_list["showMap"]))
+		map_update = 1
+
+	if(href_list["mapZLevel"])
+		var/map_z = text2num(href_list["mapZLevel"])
+		if(map_z in GLOB.using_map.map_levels)
+			set_map_z_level(map_z)
+			map_update = 1
+
+	if ((src_object && src_object.Topic(href, href_list, state)) || map_update)
+		SSnano.update_uis(src_object) // update all UIs attached to src_object
+		return TRUE
+	return FALSE
+
+/datum/nanoui/sui_act(action, list/params, datum/sui/ui)
+	if(action != "legacy_href")
+		return FALSE
+
+	var/list/href_list = islist(params) ? params.Copy() : list()
+	var/href = href_list["legacy_href_raw"]
+	href_list -= "legacy_href_raw"
+	href_list -= "legacy_href"
+	href_list -= "src"
+	if(!href)
+		href = build_compat_href(href_list)
+	return handle_topic_action(href, href_list)
+
+/datum/nanoui/sui_verify_assets(datum/sui/ui, client/C)
+	if(!should_use_sui_compat() || !istype(ui, /datum/sui/nanocompat))
+		return TRUE
+
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+	return !isnull(asset_registry_v2.ensure_nanoui_compat_ui_verified(C, src))
+
+/datum/nanoui/sui_get_head_html(datum/sui/ui, singleton/asset_registry_v2/asset_registry_v2)
+	if(!should_use_sui_compat() || !istype(ui, /datum/sui/nanocompat))
+		return null
+	return "<script type='text/javascript' defer src='{{asset:nano.js.morphdom_min}}'></script> "
 
  /**
   * Return the HTML for this UI
@@ -524,22 +725,39 @@ nanoui is used to open and update nano browser uis
 		close()
 		return
 
+	prepare_render_assets()
+
 	var/window_size = ""
 	if (width && height)
 		window_size = "size=[width]x[height];"
 	if(update_status(0))
 		return // Will be closed by update_status().
 
+	if(should_use_sui_compat())
+		var/datum/sui/nanocompat/ui = ensure_sui_compat_open()
+		if(!ui)
+			qdel(src)
+			return
+		var/list/payload = get_sui_compat_payload()
+		if(ui.is_open)
+			ui.last_data = payload
+			ui.reload_shell()
+		else
+			ui.open(payload)
+		if(!compat_ui || QDELETED(compat_ui) || !ui.is_open)
+			qdel(src)
+			return
+		SSnano.ui_opened(src)
+		return
+
 	if(use_asset_v2)
 		asset_v2_debug("nanoui open start window=[window_id] title=[asset_v2_debug_value(title)]", user?.client)
-		prepare_render_assets()
 		var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
 		if(isnull(asset_registry_v2.ensure_nanoui_ui_verified(user.client, src)))
 			asset_v2_debug("nanoui open abort unverified assets window=[window_id] title=[asset_v2_debug_value(title)]", user?.client)
 			qdel(src)
 			return
 	else
-		prepare_render_assets()
 		var/datum/asset/assets = get_asset_datum(/datum/asset/nanoui)
 		assets.send(user, get_template_filenames())
 
@@ -558,21 +776,29 @@ nanoui is used to open and update nano browser uis
 		close()
 		return
 
+	prepare_render_assets()
+
 	var/window_size = ""
 	if (width && height)
 		window_size = "size=[width]x[height];"
 	if(update_status(0))
 		return
 
+	if(should_use_sui_compat())
+		var/datum/sui/nanocompat/ui = ensure_sui_compat_open()
+		if(!ui)
+			return
+		ui.last_data = get_sui_compat_payload()
+		ui.reload_shell()
+		return
+
 	if(use_asset_v2)
 		asset_v2_debug("nanoui reload_shell window=[window_id] title=[asset_v2_debug_value(title)]", user?.client)
-		prepare_render_assets()
 		var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
 		if(isnull(asset_registry_v2.ensure_nanoui_ui_verified(user.client, src)))
 			asset_v2_debug("nanoui reload_shell abort unverified assets window=[window_id] title=[asset_v2_debug_value(title)]", user?.client)
 			return
 	else
-		prepare_render_assets()
 		var/datum/asset/assets = get_asset_datum(/datum/asset/nanoui)
 		assets.send(user, get_template_filenames())
 
@@ -599,11 +825,17 @@ nanoui is used to open and update nano browser uis
   */
 /datum/nanoui/proc/close()
 	is_auto_updating = 0
+	if(compat_ui)
+		var/datum/sui/nanocompat/compat = compat_ui
+		compat_ui = null
+		compat.owner = null
+		compat.close()
 	SSnano.ui_closed(src)
 	show_browser(user, null, "window=[window_id]")
 	for(var/datum/nanoui/child in children)
 		child.close()
 	children.Cut()
+	compat_last_data = null
 	state = null
 	master_ui = null
 	qdel(src)
@@ -635,6 +867,28 @@ nanoui is used to open and update nano browser uis
 	if (status == STATUS_DISABLED && !force_push)
 		return // Cannot update UI, no visibility
 
+	if(!isnull(data))
+		compat_last_data = data
+
+	if(should_use_sui_compat())
+		var/datum/sui/nanocompat/ui = ensure_sui_compat_open()
+		if(!ui)
+			return
+		var/list/payload = get_sui_compat_payload(data)
+		ui.status = status
+		if(!ui.is_open)
+			ui.open(payload)
+		else if(force_push && ui.user?.client && !ui.is_closing)
+			ui.last_data = payload
+			var/list/send_data = list(
+				"config" = ui.get_config_data(),
+				"data" = payload
+			)
+			to_target(ui.user, output(list2params(list(strip_improper(json_encode(send_data)))),"[ui.window_id].browser:receiveSuiData"))
+		else
+			ui.push_data(payload)
+		return
+
 	var/list/send_data = get_send_data(data)
 
 //	to_chat(user, list2json_usecache(send_data))// used for debugging //NANO DEBUG HOOK
@@ -652,21 +906,7 @@ nanoui is used to open and update nano browser uis
 	update_status(0) // update the status
 	if (status != STATUS_INTERACTIVE || user != usr) // If UI is not interactive or usr calling Topic is not the UI user
 		return
-
-	// This is used to toggle the nano map ui
-	var/map_update = 0
-	if(href_list["showMap"])
-		set_show_map(text2num(href_list["showMap"]))
-		map_update = 1
-
-	if(href_list["mapZLevel"])
-		var/map_z = text2num(href_list["mapZLevel"])
-		if(map_z in GLOB.using_map.map_levels)
-			set_map_z_level(map_z)
-			map_update = 1
-
-	if ((src_object && src_object.Topic(href, href_list, state)) || map_update)
-		SSnano.update_uis(src_object) // update all UIs attached to src_object
+	handle_topic_action(href, href_list)
 
  /**
   * Process this UI, updating the entire UI or just the status (aka visibility)

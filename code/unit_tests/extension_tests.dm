@@ -588,6 +588,13 @@
 		list("interface" = "Rcon", "module" = /datum/nano_module/program/rcon),
 		list("interface" = "ShieldsMonitor", "module" = /datum/nano_module/program/shields_monitor),
 		list("interface" = "SupermatterMonitor", "module" = /datum/nano_module/program/supermatter_monitor),
+		list("interface" = "Reports", "module" = /datum/nano_module/program/reports),
+		list("interface" = "CrewRecords", "module" = /datum/nano_module/program/records),
+		list("interface" = "DigitalWarrant", "module" = /datum/nano_module/program/digitalwarrant),
+		list("interface" = "EmailAdministration", "module" = /datum/nano_module/program/email_administration),
+		list("interface" = "EmailClient", "module" = /datum/nano_module/program/email_client),
+		list("interface" = "Comm", "module" = /datum/nano_module/program/comm),
+		list("interface" = "FileManager", "module" = /datum/nano_module/program/computer_filemanager),
 		list("interface" = "CrewMonitor", "module" = /datum/nano_module/program/crew_monitor),
 		list("interface" = "ShipSensors", "module" = /datum/nano_module/program/ship/sensors),
 		list("interface" = "CrewManifest", "module" = /datum/nano_module/program/crew_manifest),
@@ -614,6 +621,151 @@
 		number_of_failures++
 	qdel(unmigrated)
 	qdel(host)
+
+	if(number_of_failures)
+		fail("[number_of_failures] failed assertion\s.")
+	else
+		pass("All assertions passed.")
+	return TRUE
+
+/datum/unit_test/nanoui_sui_compat_interface_asset_shall_register
+	name = "NanoUI Compat - NanoCompat interface asset shall register"
+
+/datum/unit_test/nanoui_sui_compat_interface_asset_shall_register/start_test()
+	var/singleton/asset_registry_v2/registry = GET_SINGLETON(/singleton/asset_registry_v2)
+	var/number_of_failures = 0
+
+	if(!registry.ensure_sui_interface_registered("NanoCompat"))
+		log_bad("Expected NanoCompat interface asset to be registerable.")
+		number_of_failures++
+	if(!registry.packs[ASSET_PACK_NANOUI_COMPAT])
+		log_bad("Expected NanoUI compat asset pack to exist.")
+		number_of_failures++
+
+	if(number_of_failures)
+		fail("[number_of_failures] failed assertion\s.")
+	else
+		pass("All assertions passed.")
+	return TRUE
+
+/datum/unit_test/nanoui_sui_compat_payload_shall_serialize_legacy_contract
+	name = "NanoUI Compat - payload shall serialize legacy contract"
+
+/datum/unit_test/nanoui_sui_compat_payload_shall_serialize_legacy_contract/start_test()
+	var/datum/unit_test_sui_host/host = new()
+	var/mob/fake_mob/user = new()
+	var/datum/nanoui/ui = new(user, host, "compat", "crew_monitor.tmpl", "Compat Probe", 420, 360)
+	var/number_of_failures = 0
+
+	ui.set_layout_key("default")
+	ui.set_state_key("compat_state")
+	ui.set_auto_update_layout(TRUE)
+	ui.set_auto_update_content(FALSE)
+	ui.set_initial_data(list("seed" = 1))
+	ui.add_template("mapContent", "crew_monitor_map_content.tmpl")
+	ui.prepare_render_assets()
+
+	var/list/payload = ui.get_sui_compat_payload(list("value" = 5))
+	var/list/config = payload["config"]
+	var/list/assets = payload["assets"]
+	var/list/templates = assets["templates"]
+	var/list/stylesheets = assets["stylesheets"]
+	var/list/payload_data = payload["data"]
+	var/revision = payload["revision"]
+	var/current_state_key = config["stateKey"]
+	var/current_layout_key = config["layoutKey"]
+	var/current_auto_layout = config["autoUpdateLayout"]
+	var/current_auto_content = config["autoUpdateContent"]
+	var/current_value = payload_data["value"]
+	var/found_layout_css = FALSE
+	var/found_shared_css = FALSE
+
+	for(var/list/entry in stylesheets)
+		if(entry["name"] == "layout_default.css")
+			found_layout_css = TRUE
+		if(entry["name"] == "shared.css")
+			found_shared_css = TRUE
+
+	if(revision != 1)
+		log_bad("Expected first compat payload revision to be 1, got [revision].")
+		number_of_failures++
+	if(current_state_key != "compat_state")
+		log_bad("Expected compat payload stateKey compat_state, got [current_state_key].")
+		number_of_failures++
+	if(current_layout_key != "default")
+		log_bad("Expected compat payload layoutKey default, got [current_layout_key].")
+		number_of_failures++
+	if(current_auto_layout != TRUE)
+		log_bad("Expected compat payload autoUpdateLayout TRUE.")
+		number_of_failures++
+	if(current_auto_content != FALSE)
+		log_bad("Expected compat payload autoUpdateContent FALSE.")
+		number_of_failures++
+	if(current_value != 5)
+		log_bad("Expected compat payload data value 5, got [current_value].")
+		number_of_failures++
+	if(!templates["main"] || templates["main"]["name"] != "crew_monitor.tmpl")
+		log_bad("Expected compat payload to include main template crew_monitor.tmpl.")
+		number_of_failures++
+	if(!templates["layout"] || templates["layout"]["name"] != "layout_default.tmpl")
+		log_bad("Expected compat payload to include layout_default.tmpl.")
+		number_of_failures++
+	if(!templates["mapContent"] || templates["mapContent"]["name"] != "crew_monitor_map_content.tmpl")
+		log_bad("Expected compat payload to include mapContent template.")
+		number_of_failures++
+	if(!found_layout_css)
+		log_bad("Expected compat payload stylesheets to include layout_default.css.")
+		number_of_failures++
+	if(found_shared_css)
+		log_bad("Expected compat payload stylesheets to omit shared.css because SUI shell already provides it.")
+		number_of_failures++
+
+	qdel(ui)
+	qdel(user)
+	qdel(host)
+
+	if(number_of_failures)
+		fail("[number_of_failures] failed assertion\s.")
+	else
+		pass("All assertions passed.")
+	return TRUE
+
+/datum/unit_test/nanoui_sui_compat_legacy_href_shall_forward_topic_and_update_uis
+	name = "NanoUI Compat - legacy_href shall forward into Topic and update NanoUI set"
+
+/datum/unit_test/nanoui_sui_compat_legacy_href_shall_forward_topic_and_update_uis/start_test()
+	var/atom/movable/unit_test_nanoui_compat_source/source = new()
+	var/mob/fake_mob/user = new()
+	var/datum/nanoui/unit_test_compat_probe/primary = new(user, source, "main", "crew_monitor.tmpl", "Primary")
+	var/datum/nanoui/unit_test_compat_probe/secondary = new(user, source, "main", "crew_monitor.tmpl", "Secondary")
+	var/src_key = "\ref[source]"
+	var/number_of_failures = 0
+
+	SSnano.open_uis[src_key] = list("main" = list(primary, secondary))
+	user.open_uis = list(primary, secondary)
+
+	if(!primary.sui_act("legacy_href", list("legacy_href_raw" = "?src=\ref[primary];foo=bar", "foo" = "bar"), null))
+		log_bad("Expected legacy_href action to be handled.")
+		number_of_failures++
+	if(source.last_topic_href != "?src=\ref[primary];foo=bar")
+		log_bad("Expected source Topic href to match raw compat href, got [source.last_topic_href].")
+		number_of_failures++
+	if(source.last_topic_params["foo"] != "bar")
+		log_bad("Expected source Topic params to include foo=bar.")
+		number_of_failures++
+	if(primary.update_calls != 1)
+		log_bad("Expected primary compat probe to receive one update call, got [primary.update_calls].")
+		number_of_failures++
+	if(secondary.update_calls != 1)
+		log_bad("Expected secondary compat probe to receive one update call, got [secondary.update_calls].")
+		number_of_failures++
+
+	SSnano.open_uis -= src_key
+	user.open_uis = null
+	qdel(primary)
+	qdel(secondary)
+	qdel(user)
+	qdel(source)
 
 	if(number_of_failures)
 		fail("[number_of_failures] failed assertion\s.")
@@ -654,6 +806,28 @@
 
 /atom/movable/unit_test_sui_status_host/CanUseTopic(mob/user, datum/topic_state/state = GLOB.default_state)
 	return current_status
+
+/atom/movable/unit_test_nanoui_compat_source
+	var/last_topic_href
+	var/list/last_topic_params
+
+/atom/movable/unit_test_nanoui_compat_source/nano_host()
+	return src
+
+/atom/movable/unit_test_nanoui_compat_source/CanUseTopic(mob/user, datum/topic_state/state = GLOB.default_state)
+	return STATUS_INTERACTIVE
+
+/atom/movable/unit_test_nanoui_compat_source/Topic(href, href_list, datum/topic_state/state = GLOB.default_state)
+	last_topic_href = href
+	last_topic_params = islist(href_list) ? href_list.Copy() : list()
+	return TRUE
+
+/datum/nanoui/unit_test_compat_probe
+	var/update_calls = 0
+
+/datum/nanoui/unit_test_compat_probe/update(force_open = 0)
+	update_calls++
+	return
 
 /datum/unit_test/sui_power_monitor_actions_shall_update_selection
 	name = "SUI - power monitor actions shall update selection"

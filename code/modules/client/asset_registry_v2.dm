@@ -10,6 +10,7 @@
 #define ASSET_PACK_GOONCHAT "goonchat"
 #define ASSET_PACK_BROWSER_SHARED "browser_shared"
 #define ASSET_PACK_NANOUI_COMMON "nanoui_common"
+#define ASSET_PACK_NANOUI_COMPAT "nanoui_compat"
 #define ASSET_PACK_SUI_COMMON "sui_common"
 
 /client
@@ -1004,6 +1005,87 @@
 	asset_v2_debug("ensure_nanoui_ui_verified complete window=[ui.window_id] sent_assets=[sent]", C)
 	return sent
 
+/singleton/asset_registry_v2/proc/ensure_nanoui_compat_ui_verified(target, datum/nanoui/ui)
+	var/client/C = asset_v2_get_client(target)
+	if(!C || !istype(ui))
+		return null
+
+	asset_v2_debug("ensure_nanoui_compat_ui_verified start window=[ui.window_id] title=[asset_v2_debug_value(ui.title)] scripts=[asset_v2_debug_list(ui.scripts)] styles=[asset_v2_debug_list(ui.stylesheets)] templates=[asset_v2_debug_list(ui.templates)]", C)
+	var/sent = ensure_pack_verified(C, ASSET_PACK_NANOUI_COMPAT)
+	if(!C.asset_v2_packs[ASSET_PACK_NANOUI_COMPAT])
+		return null
+
+	var/interface_asset_id = ensure_sui_interface_registered("NanoCompat")
+	if(!interface_asset_id)
+		return null
+	ensure_asset_verified(C, interface_asset_id)
+	var/datum/asset_entry_v2/interface_entry = assets_by_logical_id[interface_asset_id]
+	if(!istype(interface_entry) || !C.asset_v2_sent_keys[interface_entry.key])
+		return null
+
+	var/list/pending_entries = list()
+	var/list/required_entries = list(interface_entry)
+	var/ok = TRUE
+
+	for(var/filename in ui.scripts)
+		if(nanoui_compat_skip_script(filename))
+			continue
+		var/logical_id = ensure_nanoui_filename_registered(filename)
+		if(!logical_id)
+			ok = FALSE
+			continue
+		var/datum/asset_entry_v2/entry = assets_by_logical_id[logical_id]
+		if(!istype(entry))
+			ok = FALSE
+			continue
+		required_entries |= entry
+		if(!C.asset_v2_sent_keys[entry.key])
+			pending_entries += entry
+
+	for(var/filename in ui.stylesheets)
+		if(nanoui_compat_skip_stylesheet(filename))
+			continue
+		var/logical_id = ensure_nanoui_filename_registered(filename)
+		if(!logical_id)
+			ok = FALSE
+			continue
+		var/datum/asset_entry_v2/entry = assets_by_logical_id[logical_id]
+		if(!istype(entry))
+			ok = FALSE
+			continue
+		required_entries |= entry
+		if(!C.asset_v2_sent_keys[entry.key])
+			pending_entries += entry
+
+	for(var/key in ui.templates)
+		var/template_filename = ui.templates[key]
+		var/logical_id = ensure_nanoui_filename_registered(template_filename)
+		if(!logical_id)
+			ok = FALSE
+			continue
+		var/datum/asset_entry_v2/entry = assets_by_logical_id[logical_id]
+		if(!istype(entry))
+			ok = FALSE
+			continue
+		required_entries |= entry
+		if(!C.asset_v2_sent_keys[entry.key])
+			pending_entries += entry
+
+	if(!ok)
+		return null
+
+	var/send_result = send_entries(C, pending_entries, ASSET_V2_REASON_ONDEMAND, TRUE)
+	if(isnull(send_result))
+		return null
+	sent += send_result
+
+	for(var/datum/asset_entry_v2/entry as anything in required_entries)
+		if(!C.asset_v2_sent_keys[entry.key])
+			return null
+
+	asset_v2_debug("ensure_nanoui_compat_ui_verified complete window=[ui.window_id] sent_assets=[sent]", C)
+	return sent
+
 /singleton/asset_registry_v2/proc/register_defaults()
 	asset_v2_debug("register_defaults start")
 	register_file("chat.js.jquery_min", 'code/modules/goonchat/browserassets/js/jquery.min.js')
@@ -1099,6 +1181,11 @@
 	add_legacy_assets_from_dir("nano/images/modular_computers/", nanoui_common_assets)
 	define_pack(ASSET_PACK_NANOUI_COMMON, nanoui_common_assets, list(
 		ASSET_PACK_BROWSER_SHARED
+	))
+	define_pack(ASSET_PACK_NANOUI_COMPAT, list(
+		"nano.js.morphdom_min"
+	), list(
+		ASSET_PACK_SUI_COMMON
 	))
 	define_pack(ASSET_PACK_SUI_COMMON, list(
 		"sui.js.preact_min",

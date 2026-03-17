@@ -392,6 +392,10 @@ Usage in DM:
 	else
 		head_content += "<script type='text/javascript' defer src='sui_[lowertext(interface)].js'></script> "
 
+	var/extra_head_html = src_object?.sui_get_head_html(src, asset_registry_v2)
+	if(extra_head_html)
+		head_content += extra_head_html
+
 	// NanoUI stylesheets (reuse existing dark theme)
 	head_content += "<link rel='stylesheet' type='text/css' href='{{asset:nano.css.shared}}'> "
 	head_content += "<link rel='stylesheet' type='text/css' href='{{asset:nano.css.icons}}'> "
@@ -478,6 +482,10 @@ Usage in DM:
 		asset_v2_debug("sui open abort missing interface-specific asset interface=[interface]", user.client)
 		qdel(src)
 		return
+	if(!src_object.sui_verify_assets(src, user.client))
+		asset_v2_debug("sui open abort extra asset verification failed window=[window_id] interface=[interface]", user.client)
+		qdel(src)
+		return
 
 	var/window_size = ""
 	if(width && height)
@@ -523,6 +531,9 @@ Usage in DM:
 			return
 	else
 		asset_v2_debug("sui reload_shell abort missing interface-specific asset interface=[interface]", user.client)
+		return
+	if(!src_object.sui_verify_assets(src, user.client))
+		asset_v2_debug("sui reload_shell abort extra asset verification failed window=[window_id] interface=[interface]", user.client)
 		return
 
 	var/window_size = ""
@@ -708,6 +719,37 @@ Usage in DM:
  */
 /datum/proc/sui_update(mob/user, datum/sui/ui)
 	return
+
+/**
+ * Optional asset verification hook for UIs that need extra verified assets
+ * beyond the interface bundle and SUI common pack.
+ */
+/datum/proc/sui_verify_assets(datum/sui/ui, client/C)
+	return TRUE
+
+/**
+ * Optional HTML head injection hook for special SUI shells.
+ */
+/datum/proc/sui_get_head_html(datum/sui/ui, singleton/asset_registry_v2/asset_registry_v2)
+	return null
+
+/datum/sui/nanocompat
+	var/datum/nanoui/owner
+
+/datum/sui/nanocompat/close()
+	if(owner)
+		var/datum/nanoui/current_owner = owner
+		owner = null
+		current_owner.compat_ui = null
+		. = ..()
+		if(current_owner && !QDELETED(current_owner))
+			current_owner.close()
+		return
+	return ..()
+
+/datum/sui/nanocompat/Destroy()
+	owner = null
+	return ..()
 
 // ============================================================
 // SSnano integration (extend existing subsystem)
