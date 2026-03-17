@@ -871,14 +871,15 @@ GLOBAL_VAR_AS(nanoui_use_sui_compat, FALSE)
 		compat_last_data = data
 
 	if(should_use_sui_compat())
-		var/datum/sui/nanocompat/ui = ensure_sui_compat_open()
-		if(!ui)
+		if(!compat_ui || QDELETED(compat_ui))
+			return
+		var/datum/sui/nanocompat/ui = compat_ui
+		if(!ui.is_open)
+			ui.last_data = get_sui_compat_payload(data)
 			return
 		var/list/payload = get_sui_compat_payload(data)
 		ui.status = status
-		if(!ui.is_open)
-			ui.open(payload)
-		else if(force_push && ui.user?.client && !ui.is_closing)
+		if(force_push && ui.user?.client && !ui.is_closing)
 			ui.last_data = payload
 			var/list/send_data = list(
 				"config" = ui.get_config_data(),
