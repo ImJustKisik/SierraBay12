@@ -518,7 +518,7 @@ GLOBAL_VAR_AS(nanoui_use_sui_compat, FALSE)
 		"revision" = compat_revision
 	)
 
-/datum/nanoui/sui_data(mob/user)
+/datum/nanoui/proc/sui_data(mob/user)
 	return get_sui_compat_payload(null, FALSE)
 
 /datum/nanoui/proc/ensure_sui_compat_open()
