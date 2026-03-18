@@ -61,6 +61,9 @@
 /datum/nano_module/program/email_client
 	name = "Email Client"
 	available_to_ai = TRUE
+	sui_interface_name = "EmailClient"
+	sui_width = 600
+	sui_height = 450
 	var/stored_login = ""
 	var/stored_password = ""
 	var/error = ""
@@ -171,9 +174,7 @@
 	last_message_count = 0
 	read_message_count = 0
 
-/datum/nano_module/program/email_client/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
-	var/list/data = host.initial_data(program)
-
+/datum/nano_module/program/email_client/proc/sync_email_client_state()
 	// Password has been changed by other client connected to this email account
 	if(current_account)
 		if(current_account.password != stored_password)
@@ -184,6 +185,11 @@
 		else if(current_account.suspended)
 			log_out()
 			error = "This account has been suspended. Please contact the system administrator for assistance."
+
+/datum/nano_module/program/email_client/proc/build_email_client_data(mob/user)
+	var/list/data = host.initial_data(program)
+
+	sync_email_client_state()
 
 	if(error)
 		data["error"] = error
@@ -260,6 +266,287 @@
 	else
 		data["stored_login"] = stored_login
 		data["stored_password"] = stars(stored_password, 0)
+	return data
+
+/datum/nano_module/program/email_client/proc/handle_email_client_action(action, list/params, mob/user)
+	params = params || list()
+	check_for_new_messages(TRUE)
+
+	switch(action)
+		if("login")
+			log_in()
+			return TOPIC_HANDLED
+		if("logout")
+			log_out()
+			return TOPIC_HANDLED
+		if("reset")
+			error = ""
+			return TOPIC_HANDLED
+		if("new_message")
+			new_message = TRUE
+			return TOPIC_HANDLED
+		if("cancel")
+			if(addressbook)
+				addressbook = FALSE
+			else
+				clear_message()
+			return TOPIC_HANDLED
+		if("addressbook")
+			addressbook = TRUE
+			return TOPIC_HANDLED
+		if("set_recipient")
+			msg_recipient = sanitize(params["recipient"])
+			addressbook = FALSE
+			return TOPIC_HANDLED
+		if("edit_title")
+			if(!istype(user))
+				return TOPIC_NOACTION
+			var/newtitle = sanitize(input(user, "Enter title for your message:", "Message title", msg_title), 100)
+			if(newtitle)
+				msg_title = newtitle
+			return TOPIC_HANDLED
+		if("edit_body")
+			if(!istype(user))
+				return TOPIC_NOACTION
+			var/oldtext = html_decode(msg_body)
+			oldtext = replacetext(oldtext, "\[br\]", "\n")
+
+			var/newtext = sanitize(replacetext(input(user, "Enter your message. You may use most tags from paper formatting", "Message Editor", oldtext) as message|null, "\n", "\[br\]"), 20000)
+			if(newtext)
+				msg_body = newtext
+			return TOPIC_HANDLED
+		if("edit_recipient")
+			if(!istype(user))
+				return TOPIC_NOACTION
+			var/newrecipient = sanitize(input(user, "Enter recipient's email address:", "Recipient", msg_recipient), 100)
+			if(newrecipient)
+				msg_recipient = newrecipient
+				addressbook = FALSE
+			return TOPIC_HANDLED
+		if("close_addressbook")
+			addressbook = FALSE
+			return TOPIC_HANDLED
+		if("edit_login")
+			if(!istype(user))
+				return TOPIC_NOACTION
+			var/newlogin = sanitize(input(user, "Enter login", "Login", stored_login), 100)
+			if(newlogin)
+				stored_login = newlogin
+			return TOPIC_HANDLED
+		if("edit_password")
+			if(!istype(user))
+				return TOPIC_NOACTION
+			var/newpass = sanitize(input(user, "Enter password", "Password"), 100)
+			if(newpass)
+				stored_password = newpass
+			return TOPIC_HANDLED
+		if("delete")
+			if(!istype(current_account))
+				return TOPIC_HANDLED
+			var/datum/computer_file/data/email_message/M = find_message_by_fuid(params["uid"])
+			if(!istype(M))
+				return TOPIC_HANDLED
+			if(folder == "Deleted")
+				current_account.deleted.Remove(M)
+				qdel(M)
+			else
+				current_account.deleted.Add(M)
+				current_account.inbox.Remove(M)
+				current_account.outbox.Remove(M)
+				current_account.spam.Remove(M)
+			if(current_message == M)
+				current_message = null
+			return TOPIC_HANDLED
+		if("send")
+			if(!current_account)
+				return TOPIC_HANDLED
+			if((msg_body == "") || (msg_recipient == ""))
+				error = "Error sending mail: Message body is empty!"
+				return TOPIC_HANDLED
+			if(!length(msg_title))
+				msg_title = "No subject"
+
+			var/datum/computer_file/data/email_message/message = new()
+			message.title = msg_title
+			message.stored_data = sanitize(msg_body, MAX_MESSAGE_LEN, FALSE)
+			message.source = current_account.login
+			message.recipient = msg_recipient
+			message.attachment = msg_attachment
+			if(!current_account.send_mail(msg_recipient, message))
+				error = "Error sending email: this address doesn't exist."
+				return TOPIC_HANDLED
+			error = "Email successfully sent."
+			clear_message()
+			return TOPIC_HANDLED
+		if("set_folder")
+			folder = params["folder"]
+			return TOPIC_HANDLED
+		if("reply")
+			var/datum/computer_file/data/email_message/reply_message = find_message_by_fuid(params["uid"])
+			if(!istype(reply_message))
+				return TOPIC_HANDLED
+			error = null
+			new_message = TRUE
+			msg_recipient = reply_message.source
+			msg_title = reply_message.title
+			if(copytext_char(msg_title, 1, 4) != "Re:")
+				msg_title = "Re: [msg_title]"
+			return TOPIC_HANDLED
+		if("forward")
+			var/datum/computer_file/data/email_message/forward_message = find_message_by_fuid(params["uid"])
+			if(!istype(forward_message))
+				return TOPIC_HANDLED
+			error = null
+			new_message = TRUE
+			msg_recipient = null
+			msg_title = forward_message.title
+			if(copytext_char(msg_title, 1, 4) != "Fw:")
+				msg_title = "Fw: [msg_title]"
+			msg_body = "---\n\[b]FORWARDED MESSAGE:\[/b]\n"
+			msg_body += "\[b]SUBJECT\[b]: [forward_message.title]\n"
+			msg_body += "\[b]FROM\[b]: [forward_message.source]\n"
+			msg_body += "\[b]TO\[b]: [forward_message.recipient]\n"
+			msg_body += "---\n"
+			for(var/line in splittext(forward_message.stored_data, "\n"))
+				msg_body += "> [line]\n"
+			return TOPIC_HANDLED
+		if("view")
+			var/datum/computer_file/data/email_message/view_message = find_message_by_fuid(params["uid"])
+			if(istype(view_message))
+				current_message = view_message
+			return TOPIC_HANDLED
+		if("changepassword")
+			if(!istype(user))
+				return TOPIC_NOACTION
+			var/oldpassword = sanitize(input(user, "Please enter your old password:", "Password Change"), 100)
+			if(!oldpassword)
+				return TOPIC_HANDLED
+			var/newpassword1 = sanitize(input(user, "Please enter your new password:", "Password Change"), 100)
+			if(!newpassword1)
+				return TOPIC_HANDLED
+			var/newpassword2 = sanitize(input(user, "Please re-enter your new password:", "Password Change"), 100)
+			if(!newpassword2)
+				return TOPIC_HANDLED
+
+			if(!istype(current_account))
+				error = "Please log in before proceeding."
+				return TOPIC_HANDLED
+
+			if(current_account.password != oldpassword)
+				error = "Incorrect original password"
+				return TOPIC_HANDLED
+
+			if(newpassword1 != newpassword2)
+				error = "The entered passwords do not match."
+				return TOPIC_HANDLED
+
+			current_account.password = newpassword1
+			stored_password = newpassword1
+			error = "Your password has been successfully changed!"
+			return TOPIC_HANDLED
+		if("set_notification")
+			if(!istype(user) || !current_account)
+				return TOPIC_NOACTION
+			var/new_notification = sanitize(input(user, "Enter your desired notification sound:", "Set Notification", current_account.notification_sound) as text|null)
+			if(new_notification && current_account)
+				current_account.notification_sound = new_notification
+			return TOPIC_HANDLED
+		if("mute")
+			if(!current_account)
+				return TOPIC_HANDLED
+			current_account.notification_mute = !current_account.notification_mute
+			return TOPIC_HANDLED
+		if("save")
+			var/datum/extension/interactive/ntos/os = get_ntos()
+			if(!os || !istype(user))
+				return TOPIC_HANDLED
+
+			var/filename = sanitize(input(user, "Please specify file name:", "Message export"), 100)
+			if(!filename)
+				return TOPIC_HANDLED
+
+			os = get_ntos()
+			if(!os)
+				return TOPIC_HANDLED
+
+			var/datum/computer_file/data/email_message/save_message = find_message_by_fuid(params["uid"])
+			var/datum/computer_file/data/mail = istype(save_message) ? save_message.export() : null
+			if(!istype(mail))
+				return TOPIC_HANDLED
+			mail.filename = filename
+
+			if(!os.create_file(mail))
+				error = "Internal I/O error when writing file, the hard drive may be full."
+			else
+				error = "Email exported successfully"
+			return TOPIC_HANDLED
+		if("addattachment")
+			var/datum/extension/interactive/ntos/attachment_os = get_ntos()
+			msg_attachment = null
+			if(!attachment_os || !istype(user))
+				return TOPIC_HANDLED
+
+			var/list/filenames = list()
+			var/list/files_on_disk = attachment_os.get_all_files()
+			for(var/datum/computer_file/CF in files_on_disk)
+				if(CF.unsendable)
+					continue
+				filenames.Add(CF.filename)
+
+			var/picked_file = input(user, "Please pick a file to send as attachment (max 32GQ)") as null|anything in filenames
+			if(!picked_file)
+				return TOPIC_HANDLED
+
+			attachment_os = get_ntos()
+			if(!attachment_os)
+				return TOPIC_HANDLED
+
+			for(var/datum/computer_file/CF in files_on_disk)
+				if(CF.unsendable)
+					continue
+				if(CF.filename == picked_file)
+					msg_attachment = CF.clone()
+					break
+
+			if(!istype(msg_attachment))
+				msg_attachment = null
+				error = "Unknown error when uploading attachment."
+				return TOPIC_HANDLED
+
+			if(msg_attachment.size > 32)
+				error = "Error uploading attachment: File exceeds maximal permitted file size of 32GQ."
+				msg_attachment = null
+			else
+				error = "File [msg_attachment.filename].[msg_attachment.filetype] has been successfully uploaded."
+			return TOPIC_HANDLED
+		if("downloadattachment")
+			var/datum/extension/interactive/ntos/download_os = get_ntos()
+			if(!download_os)
+				return TOPIC_HANDLED
+
+			if(!current_account || !current_message || !current_message.attachment)
+				return TOPIC_HANDLED
+
+			downloading = current_message.attachment.clone()
+			download_progress = 0
+			return TOPIC_HANDLED
+		if("canceldownload")
+			downloading = null
+			download_progress = 0
+			return TOPIC_HANDLED
+		if("remove_attachment")
+			msg_attachment = null
+			return TOPIC_HANDLED
+	return TOPIC_NOACTION
+
+/datum/nano_module/program/email_client/sui_data(mob/user)
+	return build_email_client_data(user)
+
+/datum/nano_module/program/email_client/sui_act(action, list/params, datum/sui/ui)
+	return handle_email_client_action(action, params, ui?.user) != TOPIC_NOACTION
+
+/datum/nano_module/program/email_client/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_email_client_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
@@ -314,295 +601,87 @@
 /datum/nano_module/program/email_client/Topic(href, href_list)
 	if(..())
 		return TOPIC_HANDLED
-	var/mob/living/user = usr
 
 	if(href_list["open"])
 		ui_interact()
 
-	check_for_new_messages(TRUE) // Any actual interaction (button pressing) is considered as acknowledging received message, for the purpose of notification icons.
 	if(href_list["login"])
-		log_in()
-		return TOPIC_HANDLED
+		return handle_email_client_action("login", null, usr)
 
 	if(href_list["logout"])
-		log_out()
-		return TOPIC_HANDLED
+		return handle_email_client_action("logout", null, usr)
 
 	if(href_list["reset"])
-		error = ""
-		return TOPIC_HANDLED
+		return handle_email_client_action("reset", null, usr)
 
 	if(href_list["new_message"])
-		new_message = TRUE
-		return TOPIC_HANDLED
+		return handle_email_client_action("new_message", null, usr)
 
 	if(href_list["cancel"])
-		if(addressbook)
-			addressbook = FALSE
-		else
-			clear_message()
-		return TOPIC_HANDLED
+		return handle_email_client_action("cancel", null, usr)
 
 	if(href_list["addressbook"])
-		addressbook = TRUE
-		return TOPIC_HANDLED
+		return handle_email_client_action("addressbook", null, usr)
 
 	if(href_list["set_recipient"])
-		msg_recipient = sanitize(href_list["set_recipient"])
-		addressbook = FALSE
-		return TOPIC_HANDLED
+		return handle_email_client_action("set_recipient", list("recipient" = href_list["set_recipient"]), usr)
 
 	if(href_list["edit_title"])
-		var/newtitle = sanitize(input(user,"Enter title for your message:", "Message title", msg_title), 100)
-		if(newtitle)
-			msg_title = newtitle
-		return TOPIC_HANDLED
+		return handle_email_client_action("edit_title", null, usr)
 
-	// This uses similar editing mechanism as the FileManager program, therefore it supports various paper tags and remembers formatting.
 	if(href_list["edit_body"])
-		var/oldtext = html_decode(msg_body)
-		oldtext = replacetext(oldtext, "\[br\]", "\n")
-
-		var/newtext = sanitize(replacetext(input(usr, "Enter your message. You may use most tags from paper formatting", "Message Editor", oldtext) as message|null, "\n", "\[br\]"), 20000)
-		if(newtext)
-			msg_body = newtext
-		return TOPIC_HANDLED
+		return handle_email_client_action("edit_body", null, usr)
 
 	if(href_list["edit_recipient"])
-		var/newrecipient = sanitize(input(user,"Enter recipient's email address:", "Recipient", msg_recipient), 100)
-		if(newrecipient)
-			msg_recipient = newrecipient
-			addressbook = FALSE
-		return TOPIC_HANDLED
+		return handle_email_client_action("edit_recipient", null, usr)
 
 	if(href_list["close_addressbook"])
-		addressbook = FALSE
-		return TOPIC_HANDLED
+		return handle_email_client_action("close_addressbook", null, usr)
 
 	if(href_list["edit_login"])
-		var/newlogin = sanitize(input(user,"Enter login", "Login", stored_login), 100)
-		if(newlogin)
-			stored_login = newlogin
-		return TOPIC_HANDLED
+		return handle_email_client_action("edit_login", null, usr)
 
 	if(href_list["edit_password"])
-		var/newpass = sanitize(input(user,"Enter password", "Password"), 100)
-		if(newpass)
-			stored_password = newpass
-		return TOPIC_HANDLED
+		return handle_email_client_action("edit_password", null, usr)
 
 	if(href_list["delete"])
-		if(!istype(current_account))
-			return TOPIC_HANDLED
-		var/datum/computer_file/data/email_message/M = find_message_by_fuid(href_list["delete"])
-		if(!istype(M))
-			return TOPIC_HANDLED
-		if(folder == "Deleted")
-			current_account.deleted.Remove(M)
-			qdel(M)
-		else
-			current_account.deleted.Add(M)
-			current_account.inbox.Remove(M)
-			current_account.outbox.Remove(M)
-			current_account.spam.Remove(M)
-		if(current_message == M)
-			current_message = null
-		return TOPIC_HANDLED
+		return handle_email_client_action("delete", list("uid" = href_list["delete"]), usr)
 
 	if(href_list["send"])
-		if(!current_account)
-			return TOPIC_HANDLED
-		if((msg_body == "") || (msg_recipient == ""))
-			error = "Error sending mail: Message body is empty!"
-			return TOPIC_HANDLED
-		if(!length(msg_title))
-			msg_title = "No subject"
-
-		var/datum/computer_file/data/email_message/message = new()
-		message.title = msg_title
-		message.stored_data = sanitize(msg_body, MAX_MESSAGE_LEN, FALSE)
-		message.source = current_account.login
-		message.recipient = msg_recipient
-		message.attachment = msg_attachment
-		if(!current_account.send_mail(msg_recipient, message))
-			error = "Error sending email: this address doesn't exist."
-			return TOPIC_HANDLED
-		else
-			error = "Email successfully sent."
-			clear_message()
-			return TOPIC_HANDLED
+		return handle_email_client_action("send", null, usr)
 
 	if(href_list["set_folder"])
-		folder = href_list["set_folder"]
-		return TOPIC_HANDLED
+		return handle_email_client_action("set_folder", list("folder" = href_list["set_folder"]), usr)
 
 	if(href_list["reply"])
-		var/datum/computer_file/data/email_message/M = find_message_by_fuid(href_list["reply"])
-		if(!istype(M))
-			return TOPIC_HANDLED
-		error = null
-		new_message = TRUE
-		msg_recipient = M.source
-		msg_title = M.title
-		if (copytext_char(msg_title, 1, 4) != "Re:")
-			msg_title = "Re: [msg_title]"
-		var/atom/movable/AM = host
-		if(istype(AM))
-			if(ismob(AM.loc))
-				ui_interact(AM.loc)
-		return TOPIC_HANDLED
+		return handle_email_client_action("reply", list("uid" = href_list["reply"]), usr)
 
 	if (href_list["forward"])
-		var/datum/computer_file/data/email_message/message = find_message_by_fuid(href_list["forward"])
-		if (!istype(message))
-			return TOPIC_HANDLED
-		error = null
-		new_message = TRUE
-		msg_recipient = null
-		msg_title = message.title
-		if (copytext_char(msg_title, 1, 4) != "Fw:")
-			msg_title = "Fw: [msg_title]"
-		msg_body = "---\n\[b]FORWARDED MESSAGE:\[/b]\n"
-		msg_body += "\[b]SUBJECT\[b]: [message.title]\n"
-		msg_body += "\[b]FROM\[b]: [message.source]\n"
-		msg_body += "\[b]TO\[b]: [message.recipient]\n"
-		msg_body += "---\n"
-		for (var/line in splittext(message.stored_data, "\n"))
-			msg_body += "> [line]\n"
-		var/atom/movable/movable = host
-		if (istype(movable) && ismob(movable.loc))
-			ui_interact(movable.loc)
-		return TOPIC_HANDLED
+		return handle_email_client_action("forward", list("uid" = href_list["forward"]), usr)
 
 	if(href_list["view"])
-		var/datum/computer_file/data/email_message/M = find_message_by_fuid(href_list["view"])
-		if(istype(M))
-			current_message = M
-		return TOPIC_HANDLED
+		return handle_email_client_action("view", list("uid" = href_list["view"]), usr)
 
 	if(href_list["changepassword"])
-		var/oldpassword = sanitize(input(user,"Please enter your old password:", "Password Change"), 100)
-		if(!oldpassword)
-			return TOPIC_HANDLED
-		var/newpassword1 = sanitize(input(user,"Please enter your new password:", "Password Change"), 100)
-		if(!newpassword1)
-			return TOPIC_HANDLED
-		var/newpassword2 = sanitize(input(user,"Please re-enter your new password:", "Password Change"), 100)
-		if(!newpassword2)
-			return TOPIC_HANDLED
-
-		if(!istype(current_account))
-			error = "Please log in before proceeding."
-			return TOPIC_HANDLED
-
-		if(current_account.password != oldpassword)
-			error = "Incorrect original password"
-			return TOPIC_HANDLED
-
-		if(newpassword1 != newpassword2)
-			error = "The entered passwords do not match."
-			return TOPIC_HANDLED
-
-		current_account.password = newpassword1
-		stored_password = newpassword1
-		error = "Your password has been successfully changed!"
-		return TOPIC_HANDLED
+		return handle_email_client_action("changepassword", null, usr)
 
 	if(href_list["set_notification"])
-		var/new_notification = sanitize(input(user, "Enter your desired notification sound:", "Set Notification", current_account.notification_sound) as text|null)
-		if(new_notification && current_account)
-			current_account.notification_sound = new_notification
-		return TOPIC_HANDLED
+		return handle_email_client_action("set_notification", null, usr)
 
 	if(href_list["mute"])
-		current_account.notification_mute = !current_account.notification_mute
-		return TOPIC_HANDLED
-
-	// The following entries are Modular Computer framework only, and therefore won't do anything in other cases (like AI View)
+		return handle_email_client_action("mute", null, usr)
 
 	if(href_list["save"])
-		// Fully dependant on modular computers here.
-		var/datum/extension/interactive/ntos/os = get_ntos()
-		if(!os)
-			return TOPIC_HANDLED
-
-		var/filename = sanitize(input(user,"Please specify file name:", "Message export"), 100)
-		if(!filename)
-			return TOPIC_HANDLED
-
-		os = get_ntos()
-		if(!os)
-			return TOPIC_HANDLED
-
-		var/datum/computer_file/data/email_message/M = find_message_by_fuid(href_list["save"])
-		var/datum/computer_file/data/mail = istype(M) ? M.export() : null
-		if(!istype(mail))
-			return TOPIC_HANDLED
-		mail.filename = filename
-
-		if(!os.create_file(mail))
-			error = "Internal I/O error when writing file, the hard drive may be full."
-		else
-			error = "Email exported successfully"
-		return TOPIC_HANDLED
+		return handle_email_client_action("save", list("uid" = href_list["save"]), usr)
 
 	if(href_list["addattachment"])
-		var/datum/extension/interactive/ntos/os = get_ntos()
-		msg_attachment = null
-		if(!os)
-			return TOPIC_HANDLED
-
-		var/list/filenames = list()
-		var/list/files_on_disk = os.get_all_files()
-		for(var/datum/computer_file/CF in files_on_disk)
-			if(CF.unsendable)
-				continue
-			filenames.Add(CF.filename)
-
-		var/picked_file = input(user, "Please pick a file to send as attachment (max 32GQ)") as null|anything in filenames
-		if(!picked_file)
-			return TOPIC_HANDLED
-
-		os = get_ntos()
-		if(!os)
-			return TOPIC_HANDLED
-
-		for(var/datum/computer_file/CF in files_on_disk)
-			if(CF.unsendable)
-				continue
-			if(CF.filename == picked_file)
-				msg_attachment = CF.clone()
-				break
-
-		if(!istype(msg_attachment))
-			msg_attachment = null
-			error = "Unknown error when uploading attachment."
-			return TOPIC_HANDLED
-
-		if(msg_attachment.size > 32)
-			error = "Error uploading attachment: File exceeds maximal permitted file size of 32GQ."
-			msg_attachment = null
-		else
-			error = "File [msg_attachment.filename].[msg_attachment.filetype] has been successfully uploaded."
-		return TOPIC_HANDLED
+		return handle_email_client_action("addattachment", null, usr)
 
 	if(href_list["downloadattachment"])
-		var/datum/extension/interactive/ntos/os = get_ntos()
-		if(!os)
-			return TOPIC_HANDLED
-
-		if(!current_account || !current_message || !current_message.attachment)
-			return TOPIC_HANDLED
-
-		downloading = current_message.attachment.clone()
-		download_progress = 0
-		return TOPIC_HANDLED
+		return handle_email_client_action("downloadattachment", null, usr)
 
 	if(href_list["canceldownload"])
-		downloading = null
-		download_progress = 0
-		return TOPIC_HANDLED
+		return handle_email_client_action("canceldownload", null, usr)
 
 	if(href_list["remove_attachment"])
-		msg_attachment = null
-		return TOPIC_HANDLED
+		return handle_email_client_action("remove_attachment", null, usr)
