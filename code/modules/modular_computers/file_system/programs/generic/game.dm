@@ -57,6 +57,7 @@
 	var/enemy_name = "Greytide Horde"
 	var/gameover
 	var/information
+	var/wolfenstein_mode = FALSE
 
 /datum/nano_module/program/arcade_classic/New()
 	..()
@@ -74,6 +75,7 @@
 	data["enemy_name"] = enemy_name
 	data["gameover"] = gameover
 	data["information"] = information
+	data["wolfenstein_mode"] = wolfenstein_mode
 	return data
 
 /datum/nano_module/program/arcade_classic/sui_data(mob/user)
@@ -169,6 +171,7 @@
 	enemy_mana = 20
 	enemy_health = 45
 	gameover = FALSE
+	wolfenstein_mode = FALSE
 	information = "A new game has started!"
 
 
