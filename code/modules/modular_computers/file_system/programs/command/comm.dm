@@ -26,6 +26,9 @@
 /datum/nano_module/program/comm
 	name = "Command and Communications Program"
 	available_to_ai = TRUE
+	sui_interface_name = "Comm"
+	sui_width = 550
+	sui_height = 420
 	var/current_status = STATE_DEFAULT
 	var/msg_line1 = ""
 	var/msg_line2 = ""
@@ -40,10 +43,16 @@
 	..()
 	crew_announcement.newscast = 1
 
-/datum/nano_module/program/comm/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/comm/proc/can_use_comm(mob/user)
+	if(!check_access(user, admin_access))
+		return FALSE
+	if(program)
+		return !!program.can_run(user)
+	return TRUE
 
+/datum/nano_module/program/comm/proc/build_comm_data(mob/user)
 	var/list/data = host.initial_data(program)
-	var/authenticated = check_access(user, admin_access)
+	var/authenticated = can_use_comm(user)
 
 	if(program && program.computer)
 		data["net_comms"] = program.computer.get_ntnet_capability(NTNET_COMMUNICATION)
@@ -62,7 +71,7 @@
 	data["message_line1"] = msg_line1
 	data["message_line2"] = msg_line2
 	data["state"] = current_status
-	data["isAI"] = issilicon(usr)
+	data["isAI"] = issilicon(user)
 	data["boss_short"] = GLOB.using_map.boss_short
 	data["authenticated"] = authenticated
 
@@ -99,108 +108,90 @@
 			option["silicon_allowed"] = EO.silicon_allowed
 			processed_evac_options[LIST_PRE_INC(processed_evac_options)] = option
 	data["evac_options"] = processed_evac_options
+	return data
 
-	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
-	if(!ui)
-		ui = new(user, src, ui_key, "communication.tmpl", name, 550, 420, state = state)
-		ui.auto_update_layout = 1
-		ui.set_initial_data(data)
-		ui.open()
-
-/datum/nano_module/program/comm/proc/is_authenticated(authenticated, mob/user)
-	if(program)
-		return program.can_run(user)
-	return TRUE
-
-/datum/nano_module/program/comm/Topic(href, href_list)
-	if(..())
-		return TOPIC_HANDLED
-	var/mob/user = usr
+/datum/nano_module/program/comm/proc/handle_comm_action(action, list/params, mob/user)
+	params = params || list()
 	var/ntn_comm = (program && program.computer) ? program.computer.get_ntnet_capability(NTNET_COMMUNICATION) : TRUE
 	var/ntn_cont = (program && program.computer) ? program.computer.get_ntnet_capability(NTNET_SYSTEMCONTROL) : TRUE
 	var/singleton/comm_message_listener/l = GET_SINGLETON(/singleton/comm_message_listener)
-	switch(href_list["action"])
+
+	switch(action)
 		if("sw_menu")
-			. = TOPIC_HANDLED
-			current_status = text2num(href_list["target"])
+			current_status = text2num(params["target"])
+			return TOPIC_HANDLED
 		if("announce")
-			. = TOPIC_HANDLED
-			if(is_authenticated(user) && !issilicon(usr) && ntn_comm)
+			if(can_use_comm(user) && !issilicon(user) && ntn_comm)
 				if(user)
 					var/obj/item/card/id/id_card = user.GetIdCard()
 					crew_announcement.announcer = GetNameAndAssignmentFromId(id_card)
 				else
 					crew_announcement.announcer = "Unknown"
 				if(announcment_cooldown)
-					to_chat(usr, "Please allow at least one minute to pass between announcements")
-					return
-				var/input = sanitize(input(usr, "Please write a message to announce to the [station_name()].", "Priority Announcement") as null|message, extra = FALSE)
+					to_chat(user, "Please allow at least one minute to pass between announcements")
+					return TOPIC_HANDLED
+				var/input = sanitize(input(user, "Please write a message to announce to the [station_name()].", "Priority Announcement") as null|message, extra = FALSE)
 				if(!input || !can_still_topic())
-					return
+					return TOPIC_HANDLED
 				var/affected_zlevels = GetConnectedZlevels(get_host_z())
 				crew_announcement.Announce(input, msg_sanitized = TRUE, zlevels = affected_zlevels)
-				//[SIERRA-ADD]
 				ntnet_global.add_log("***[program.computer.get_network_tag()] make announcement.***")
-				//[/SIERRA-ADD]
 				announcment_cooldown = 1
-				spawn(600)//One minute cooldown
+				spawn(600)
 					announcment_cooldown = 0
+			return TOPIC_HANDLED
 		if("message")
-			. = TOPIC_HANDLED
-			if(href_list["target"] == "emagged")
-				if(program)
-					if(is_authenticated(user) && program.computer.emagged() && !issilicon(usr) && ntn_comm)
-						if(centcomm_message_cooldown)
-							to_chat(usr, SPAN_WARNING("Arrays recycling. Please stand by."))
-							SSnano.update_uis(src)
-							return
-						var/input = sanitize(input(usr, "Please choose a message to transmit to \[ABNORMAL ROUTING CORDINATES\] via quantum entanglement.  Please be aware that this process is very expensive, and abuse will lead to... termination. Transmission does not guarantee a response. There is a 30 second delay before you may send another message, be clear, full and concise.", "To abort, send an empty message.", "") as null|text)
-						if(!input || !can_still_topic())
-							return
-						Syndicate_announce(input, usr)
-						to_chat(usr, SPAN_NOTICE("Message transmitted."))
-						log_say("[key_name(usr)] has made an illegal announcement: [input]")
-						centcomm_message_cooldown = 1
-						spawn(300)//30 second cooldown
-							centcomm_message_cooldown = 0
-			else if(href_list["target"] == "regular")
-				if(is_authenticated(user) && !issilicon(usr) && ntn_comm)
+			if(params["target"] == "emagged")
+				if(program && can_use_comm(user) && program.computer.emagged() && !issilicon(user) && ntn_comm)
 					if(centcomm_message_cooldown)
-						to_chat(usr, SPAN_WARNING("Arrays recycling. Please stand by."))
+						to_chat(user, SPAN_WARNING("Arrays recycling. Please stand by."))
 						SSnano.update_uis(src)
-						return
-					if(!is_relay_online())//Contact Centcom has a check, Syndie doesn't to allow for Traitor funs.
-						to_chat(usr, SPAN_WARNING("No Emergency Bluespace Relay detected. Unable to transmit message."))
-						return
-					var/input = sanitize(input("Please choose a message to transmit to [GLOB.using_map.boss_short] via quantum entanglement.  Please be aware that this process is very expensive, and abuse will lead to... termination.  Transmission does not guarantee a response. There is a 30 second delay before you may send another message, be clear, full and concise.", "To abort, send an empty message.", "") as null|text)
-					if(!input || !can_still_topic())
-						return
-					Centcomm_announce(input, usr)
-					to_chat(usr, SPAN_NOTICE("Message transmitted."))
-					log_say("[key_name(usr)] has made an IA [GLOB.using_map.boss_short] announcement: [input]")
+						return TOPIC_HANDLED
+					var/emagged_input = sanitize(input(user, "Please choose a message to transmit to \[ABNORMAL ROUTING CORDINATES\] via quantum entanglement.  Please be aware that this process is very expensive, and abuse will lead to... termination. Transmission does not guarantee a response. There is a 30 second delay before you may send another message, be clear, full and concise.", "To abort, send an empty message.", "") as null|text)
+					if(!emagged_input || !can_still_topic())
+						return TOPIC_HANDLED
+					Syndicate_announce(emagged_input, user)
+					to_chat(user, SPAN_NOTICE("Message transmitted."))
+					log_say("[key_name(user)] has made an illegal announcement: [emagged_input]")
 					centcomm_message_cooldown = 1
-					spawn(300) //30 second cooldown
+					spawn(300)
 						centcomm_message_cooldown = 0
+			else if(params["target"] == "regular")
+				if(can_use_comm(user) && !issilicon(user) && ntn_comm)
+					if(centcomm_message_cooldown)
+						to_chat(user, SPAN_WARNING("Arrays recycling. Please stand by."))
+						SSnano.update_uis(src)
+						return TOPIC_HANDLED
+					if(!is_relay_online())
+						to_chat(user, SPAN_WARNING("No Emergency Bluespace Relay detected. Unable to transmit message."))
+						return TOPIC_HANDLED
+					var/regular_input = sanitize(input(user, "Please choose a message to transmit to [GLOB.using_map.boss_short] via quantum entanglement.  Please be aware that this process is very expensive, and abuse will lead to... termination.  Transmission does not guarantee a response. There is a 30 second delay before you may send another message, be clear, full and concise.", "To abort, send an empty message.", "") as null|text)
+					if(!regular_input || !can_still_topic())
+						return TOPIC_HANDLED
+					Centcomm_announce(regular_input, user)
+					to_chat(user, SPAN_NOTICE("Message transmitted."))
+					log_say("[key_name(user)] has made an IA [GLOB.using_map.boss_short] announcement: [regular_input]")
+					centcomm_message_cooldown = 1
+					spawn(300)
+						centcomm_message_cooldown = 0
+			return TOPIC_HANDLED
 		if("evac")
-			. = TOPIC_HANDLED
-			if(is_authenticated(user))
-				var/datum/evacuation_option/selected_evac_option = evacuation_controller.evacuation_options[href_list["target"]]
-				if (isnull(selected_evac_option) || !istype(selected_evac_option))
-					return
-				if (!selected_evac_option.silicon_allowed && issilicon(user))
-					return
-				if (selected_evac_option.needs_syscontrol && !ntn_cont)
-					return
+			if(can_use_comm(user))
+				var/datum/evacuation_option/selected_evac_option = evacuation_controller?.evacuation_options[params["target"]]
+				if(isnull(selected_evac_option) || !istype(selected_evac_option))
+					return TOPIC_HANDLED
+				if(!selected_evac_option.silicon_allowed && issilicon(user))
+					return TOPIC_HANDLED
+				if(selected_evac_option.needs_syscontrol && !ntn_cont)
+					return TOPIC_HANDLED
 				var/confirm = alert("Are you sure you want to [selected_evac_option.option_desc]?", name, "No", "Yes")
-				if (confirm == "Yes" && can_still_topic())
+				if(confirm == "Yes" && can_still_topic())
 					evacuation_controller.handle_evac_option(selected_evac_option.option_target, user)
-					//[SIERRA-ADD]
 					ntnet_global.add_log("***[program.computer.get_network_tag()] [selected_evac_option.option_desc]***")
-					//[/SIERRA-ADD]
+			return TOPIC_HANDLED
 		if("setstatus")
-			. = TOPIC_HANDLED
-			if(is_authenticated(user) && ntn_cont)
-				switch(href_list["target"])
+			if(can_use_comm(user) && ntn_cont)
+				switch(params["target"])
 					if("line1")
 						var/linput = reject_bad_text(sanitize(input("Line 1", "Enter Message Text", msg_line1) as text|null, 40), 40)
 						if(can_still_topic())
@@ -212,45 +203,92 @@
 					if("message")
 						post_status("message", msg_line1, msg_line2)
 					if("image")
-						post_status("image", href_list["image"])
+						post_status("image", params["image"])
 					else
-						post_status(href_list["target"])
+						post_status(params["target"])
+			return TOPIC_HANDLED
 		if("setalert")
-			. = TOPIC_HANDLED
-			if(is_authenticated(user) && !issilicon(usr) && ntn_cont && ntn_comm)
+			if(can_use_comm(user) && !issilicon(user) && ntn_cont && ntn_comm)
 				var/singleton/security_state/security_state = GET_SINGLETON(GLOB.using_map.security_state)
-				var/singleton/security_level/target_level = locate(href_list["target"]) in security_state.comm_console_security_levels
+				var/singleton/security_level/target_level = locate(params["target"]) in security_state.comm_console_security_levels
 				if(target_level && security_state.can_switch_to(target_level))
-					var/confirm = alert("Are you sure you want to change the alert level to [target_level.name]?", name, "No", "Yes")
-					if(confirm == "Yes" && can_still_topic())
+					var/confirm_alert = alert("Are you sure you want to change the alert level to [target_level.name]?", name, "No", "Yes")
+					if(confirm_alert == "Yes" && can_still_topic())
 						security_state.set_security_level(target_level)
 			else
-				to_chat(usr, "You press the button, but a red light flashes and nothing happens.") //This should never happen
-
+				to_chat(user, "You press the button, but a red light flashes and nothing happens.")
 			current_status = STATE_DEFAULT
+			return TOPIC_HANDLED
 		if("viewmessage")
-			. = TOPIC_HANDLED
-			if(is_authenticated(user) && ntn_comm)
-				current_viewing_message_id = text2num(href_list["target"])
+			if(can_use_comm(user) && ntn_comm)
+				current_viewing_message_id = text2num(params["target"])
+				current_viewing_message = null
 				for(var/list/m in l.messages)
 					if(m["id"] == current_viewing_message_id)
 						current_viewing_message = m
 				current_status = STATE_VIEWMESSAGE
+			return TOPIC_HANDLED
 		if("printmessage")
-			. = TOPIC_HANDLED
-			if(is_authenticated(user) && ntn_comm)
-				if(!program.computer.print_paper(current_viewing_message["contents"],current_viewing_message["title"]))
-					to_chat(usr, SPAN_NOTICE("Hardware Error: Printer was unable to print the selected file."))
+			if(can_use_comm(user) && ntn_comm && current_viewing_message)
+				if(!program.computer.print_paper(current_viewing_message["contents"], current_viewing_message["title"]))
+					to_chat(user, SPAN_NOTICE("Hardware Error: Printer was unable to print the selected file."))
+			return TOPIC_HANDLED
 		if("unbolt_doors")
 			GLOB.using_map.unbolt_saferooms()
-			to_chat(usr, SPAN_NOTICE("The console beeps, confirming the signal was sent to have the saferooms unbolted."))
+			to_chat(user, SPAN_NOTICE("The console beeps, confirming the signal was sent to have the saferooms unbolted."))
+			return TOPIC_HANDLED
 		if("bolt_doors")
 			GLOB.using_map.bolt_saferooms()
-			to_chat(usr, SPAN_NOTICE("The console beeps, confirming the signal was sent to have the saferooms bolted."))
+			to_chat(user, SPAN_NOTICE("The console beeps, confirming the signal was sent to have the saferooms bolted."))
+			return TOPIC_HANDLED
 		if("toggle_alert_border")
-			. = TOPIC_HANDLED
-			if(is_authenticated(user) && ntn_comm)
+			if(can_use_comm(user) && ntn_comm)
 				post_status("toggle_alert_border")
+			return TOPIC_HANDLED
+	return TOPIC_NOACTION
+
+/datum/nano_module/program/comm/sui_data(mob/user)
+	return build_comm_data(user)
+
+/datum/nano_module/program/comm/sui_act(action, list/params, datum/sui/ui)
+	return handle_comm_action(action, params, ui?.user) != TOPIC_NOACTION
+
+/datum/nano_module/program/comm/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_comm_data(user)
+
+	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
+	if(!ui)
+		ui = new(user, src, ui_key, "communication.tmpl", name, 550, 420, state = state)
+		ui.auto_update_layout = 1
+		ui.set_initial_data(data)
+		ui.open()
+
+/datum/nano_module/program/comm/Topic(href, href_list)
+	if(..())
+		return TOPIC_HANDLED
+	switch(href_list["action"])
+		if("sw_menu")
+			return handle_comm_action("sw_menu", list("target" = href_list["target"]), usr)
+		if("announce")
+			return handle_comm_action("announce", null, usr)
+		if("message")
+			return handle_comm_action("message", list("target" = href_list["target"]), usr)
+		if("evac")
+			return handle_comm_action("evac", list("target" = href_list["target"]), usr)
+		if("setstatus")
+			return handle_comm_action("setstatus", list("target" = href_list["target"], "image" = href_list["image"]), usr)
+		if("setalert")
+			return handle_comm_action("setalert", list("target" = href_list["target"]), usr)
+		if("viewmessage")
+			return handle_comm_action("viewmessage", list("target" = href_list["target"]), usr)
+		if("printmessage")
+			return handle_comm_action("printmessage", null, usr)
+		if("unbolt_doors")
+			return handle_comm_action("unbolt_doors", null, usr)
+		if("bolt_doors")
+			return handle_comm_action("bolt_doors", null, usr)
+		if("toggle_alert_border")
+			return handle_comm_action("toggle_alert_border", null, usr)
 
 #undef STATE_DEFAULT
 #undef STATE_MESSAGELIST
