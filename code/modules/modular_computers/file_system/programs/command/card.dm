@@ -12,12 +12,15 @@
 
 /datum/nano_module/program/card_mod
 	name = "ID card modification program"
+	sui_interface_name = "CardMod"
+	sui_width = 600
+	sui_height = 700
 	var/mod_mode = 1
 	var/is_centcom = 0
 	var/show_assignments = 0
 	var/selected_branch = null // Track currently selected branch for rank selection
 
-/datum/nano_module/program/card_mod/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/card_mod/proc/build_card_mod_data(mob/user)
 	var/list/data = host.initial_data(program)
 	var/obj/item/stock_parts/computer/card_slot/card_slot = program.computer.get_component(PART_CARD)
 
@@ -89,6 +92,20 @@
 					"name" = get_region_accesses_name(i),
 					"accesses" = accesses)))
 			data["regions"] = regions
+	return data
+
+/datum/nano_module/program/card_mod/sui_data(mob/user)
+	return build_card_mod_data(user)
+
+/datum/nano_module/program/card_mod/sui_act(action, list/params, datum/sui/ui)
+	var/datum/computer_file/program/card_mod/card_program = program
+	var/mob/user = ui ? ui.user : null
+	if(!istype(card_program))
+		return FALSE
+	return card_program.handle_card_mod_action(action, params, user) != TOPIC_NOACTION
+
+/datum/nano_module/program/card_mod/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_card_mod_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
@@ -138,35 +155,43 @@
 /datum/nano_module/program/card_mod/proc/get_accesses(is_centcom = 0)
 	return null
 
+/datum/computer_file/program/card_mod/proc/handle_card_mod_action(action, list/params, mob/user)
+	params = params || list()
 
-/datum/computer_file/program/card_mod/Topic(href, href_list)
-	if(..())
-		return 1
-
-	var/mob/user = usr
-	var/obj/item/card/id/user_id_card = user?.GetIdCard()
-	var/obj/item/card/id/id_card = computer?.get_inserted_id()
+	var/obj/item/card/id/user_id_card = user ? user.GetIdCard() : null
+	var/obj/item/card/id/id_card = computer ? computer.get_inserted_id() : null
 	var/datum/nano_module/program/card_mod/module = NM
 
-	if (!user_id_card || !id_card || !module)
-		return
+	if (!module)
+		return TOPIC_NOACTION
 
-	switch(href_list["action"])
+	switch(action)
 		if("switchm")
-			if(href_list["target"] == "mod")
+			if(params["target"] == "mod")
 				module.mod_mode = 1
-			else if (href_list["target"] == "manifest")
+			else if (params["target"] == "manifest")
 				module.mod_mode = 0
+			return TOPIC_HANDLED
 		if("togglea")
-			if(module.show_assignments)
-				module.show_assignments = 0
+			module.show_assignments = !module.show_assignments
+			return TOPIC_HANDLED
+		if("eject")
+			var/obj/item/stock_parts/computer/card_slot/card_slot = computer.get_component(PART_CARD)
+			if(computer.get_inserted_id())
+				card_slot.eject_id(user)
 			else
-				module.show_assignments = 1
+				card_slot.insert_id(user.get_active_hand(), user)
+			return TOPIC_HANDLED
+
+	if (!user_id_card || !id_card)
+		return TOPIC_HANDLED
+
+	switch(action)
 		if("print")
 			if(!authorized(user_id_card))
 				to_chat(usr, SPAN_WARNING("Access denied."))
-				return
-			if(computer.has_component(PART_PRINTER)) //This option should never be called if there is no printer
+				return TOPIC_HANDLED
+			if(computer.has_component(PART_PRINTER))
 				if(module.mod_mode)
 					if(can_run(user, 1))
 						var/contents = {"<h4>Access Report</h4>
@@ -190,37 +215,31 @@
 
 						if(!computer.print_paper(contents,"access report"))
 							to_chat(usr, SPAN_NOTICE("Hardware error: Printer was unable to print the file. It may be out of paper."))
-							return
 					else
-						var/contents = {"<h4>Crew Manifest</h4>
+						var/manifest_contents = {"<h4>Crew Manifest</h4>
 										<br>
 										[html_crew_manifest()]
 										"}
-						if(!computer.print_paper(contents, "crew manifest ([stationtime2text()])"))
+						if(!computer.print_paper(manifest_contents, "crew manifest ([stationtime2text()])"))
 							to_chat(usr, SPAN_NOTICE("Hardware error: Printer was unable to print the file. It may be out of paper."))
-							return
-		if("eject")
-			var/obj/item/stock_parts/computer/card_slot/card_slot = computer.get_component(PART_CARD)
-			if(computer.get_inserted_id())
-				card_slot.eject_id(user)
-			else
-				card_slot.insert_id(user.get_active_hand(), user)
+			return TOPIC_HANDLED
 		if("terminate")
 			if(!authorized(user_id_card))
 				to_chat(usr, SPAN_WARNING("Access denied."))
-				return
+				return TOPIC_HANDLED
 			if(computer && can_run(user, 1))
 				id_card.assignment = "Terminated"
 				id_card.military_branch = null
 				id_card.military_rank = null
 				remove_nt_access(id_card)
 				callHook("terminate_employee", list(id_card))
+			return TOPIC_HANDLED
 		if("edit")
 			if(!authorized(user_id_card))
 				to_chat(usr, SPAN_WARNING("Access denied."))
-				return
+				return TOPIC_HANDLED
 			if(computer && can_run(user, 1))
-				if(href_list["name"])
+				if(params["name"])
 					var/temp_name = sanitizeName(input("Enter name.", "Name", id_card.registered_name),allow_numbers=TRUE)
 					if(temp_name)
 						id_card.registered_name = temp_name
@@ -228,24 +247,24 @@
 						id_card.formal_name_prefix = initial(id_card.formal_name_prefix)
 					else
 						computer.show_error(usr, "Invalid name entered!")
-				else if(href_list["account"])
+				else if(params["account"])
 					var/account_num = text2num(input("Enter account number.", "Account", id_card.associated_account_number))
 					id_card.associated_account_number = account_num
-				else if(href_list["elogin"])
+				else if(params["elogin"])
 					var/email_login = input("Enter email login.", "Email login", id_card.associated_email_login["login"])
 					id_card.associated_email_login["login"] = email_login
-				else if(href_list["epswd"])
+				else if(params["epswd"])
 					var/email_password = input("Enter email password.", "Email password")
 					id_card.associated_email_login["password"] = email_password
+			return TOPIC_HANDLED
 		if("assign")
 			if(!authorized(user_id_card))
 				to_chat(usr, SPAN_WARNING("Access denied."))
-				return
+				return TOPIC_HANDLED
 			if(computer && can_run(user, 1) && id_card)
-				var/t1 = href_list["assign_target"]
+				var/t1 = params["assign_target"]
 				if(t1 == "Custom")
 					var/temp_t = sanitize(input("Enter a custom job assignment.","Assignment", id_card.assignment), 45)
-					//let custom jobs function as an impromptu alt title, mainly for sechuds
 					if(temp_t)
 						id_card.assignment = temp_t
 				else
@@ -256,22 +275,20 @@
 						var/datum/job/jobdatum = SSjobs.get_by_title(t1)
 						if(!jobdatum)
 							to_chat(usr, SPAN_WARNING("No log exists for this job: [t1]"))
-							return
-
+							return TOPIC_HANDLED
 						access = jobdatum.get_access()
-
 					remove_nt_access(id_card)
 					apply_access(id_card, access)
 					id_card.assignment = t1
 					id_card.rank = t1
-
 				callHook("reassign_employee", list(id_card))
+			return TOPIC_HANDLED
 		if("set_military_branch")
 			if(!authorized(user_id_card))
 				to_chat(usr, SPAN_WARNING("Access denied."))
-				return
+				return TOPIC_HANDLED
 			if(computer && can_run(user, 1) && id_card)
-				var/new_branch = href_list["branch_target"]
+				var/new_branch = params["branch_target"]
 				if(new_branch == "Unset")
 					id_card.military_branch = null
 					id_card.military_rank = null
@@ -280,18 +297,19 @@
 					var/datum/mil_branch/branch = GLOB.mil_branches.get_branch(new_branch)
 					if(branch)
 						id_card.military_branch = branch
-						id_card.military_rank = null // Reset rank when changing branch
+						id_card.military_rank = null
 						module.selected_branch = new_branch
 					else
 						to_chat(usr, SPAN_WARNING("Invalid military branch: [new_branch]"))
-						return
+						return TOPIC_HANDLED
 				callHook("update_military_branch", list(id_card))
+			return TOPIC_HANDLED
 		if("set_military_rank")
 			if(!authorized(user_id_card))
 				to_chat(usr, SPAN_WARNING("Access denied."))
-				return
+				return TOPIC_HANDLED
 			if(computer && can_run(user, 1) && id_card && id_card.military_branch)
-				var/new_rank = href_list["rank_target"]
+				var/new_rank = params["rank_target"]
 				if(new_rank == "Unset")
 					id_card.military_rank = null
 				else
@@ -306,12 +324,13 @@
 						id_card.military_rank = rank_datum
 					else
 						to_chat(usr, SPAN_WARNING("Invalid military rank: [new_rank]"))
-						return
+						return TOPIC_HANDLED
 				callHook("update_military_rank", list(id_card))
+			return TOPIC_HANDLED
 		if("access")
-			if(href_list["allowed"] && computer && can_run(user, 1) && id_card)
-				var/access_type = href_list["access_target"]
-				var/access_allowed = text2num(href_list["allowed"])
+			if(params["allowed"] && computer && can_run(user, 1) && id_card)
+				var/access_type = params["access_target"]
+				var/access_allowed = text2num(params["allowed"])
 				if(access_type in get_access_ids(ACCESS_TYPE_STATION|ACCESS_TYPE_CENTCOM))
 					for(var/access in user_id_card.access)
 						var/region_type = get_access_region_by_id(access_type)
@@ -320,11 +339,20 @@
 							if(!access_allowed)
 								id_card.access += access_type
 							break
+			return TOPIC_HANDLED
+	return TOPIC_NOACTION
+
+/datum/computer_file/program/card_mod/Topic(href, href_list)
+	if(..())
+		return 1
+	var/result = handle_card_mod_action(href_list["action"], href_list, usr)
+	var/obj/item/card/id/id_card = computer ? computer.get_inserted_id() : null
 	if(id_card)
 		id_card.SetName("[id_card.registered_name]'s ID Card ([id_card.assignment])")
-
-	SSnano.update_uis(NM)
-	return 1
+	if(result != TOPIC_NOACTION)
+		SSnano.update_uis(NM)
+		return 1
+	return
 
 /datum/computer_file/program/card_mod/proc/remove_nt_access(obj/item/card/id/id_card)
 	id_card.access -= get_access_ids(ACCESS_TYPE_STATION|ACCESS_TYPE_CENTCOM)
