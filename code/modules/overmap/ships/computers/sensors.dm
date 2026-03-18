@@ -1,3 +1,4 @@
+// SIERRA-ADD - SUI - ship sensors console migrated to SUI path
 #define SENSORS_STRENGTH_COEFFICIENT 7
 
 /obj/machinery/computer/modular/preset/sensors

@@ -35,7 +35,7 @@
 	if(.)
 		is_edited = FALSE
 
-/datum/computer_file/program/wordprocessor/proc/handle_wordprocessor_action(action, list/params, mob/user)
+/datum/computer_file/program/wordprocessor/proc/handle_wordprocessor_action(action, list/params, mob/user) // SIERRA-ADD - SUI
 	switch(action)
 		if("preview_text")
 			if(!istype(user))
@@ -180,9 +180,9 @@
 
 /datum/nano_module/program/computer_wordprocessor
 	name = "Word Processor"
-	sui_interface_name = "WordProcessor"
-	sui_width = 575
-	sui_height = 700
+	sui_interface_name = "WordProcessor" // SIERRA-ADD - SUI
+	sui_width = 575 // SIERRA-ADD - SUI
+	sui_height = 700 // SIERRA-ADD - SUI
 
 /datum/nano_module/program/computer_wordprocessor/proc/build_wordprocessor_data(mob/user)
 	var/list/data = host.initial_data(program)

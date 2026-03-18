@@ -1,3 +1,4 @@
+<!-- SIERRA-EDIT - SUI - migration status and references updated -->
 # SUI (Sierra UI) Framework
 
 **SUI** — легковесный реактивный UI-фреймворк для SierraBay12, построенный на [Preact](https://preactjs.com/) поверх транспорта NanoUI. Заменяет `.tmpl`-шаблоны doT.js на компонентный подход с Virtual DOM, сохраняя совместимость с IE11 в BYOND.

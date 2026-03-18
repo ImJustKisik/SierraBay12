@@ -1,3 +1,4 @@
+// SIERRA-ADD - SUI - nano_module base SUI integration helpers
 /datum/nano_module
 	var/name
 	var/datum/host

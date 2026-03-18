@@ -21,9 +21,9 @@
 
 /datum/nano_module/program/computer_configurator
 	name = "NTOS Computer Configuration Tool"
-	sui_interface_name = "ComputerConfigurator"
-	sui_width = 575
-	sui_height = 700
+	sui_interface_name = "ComputerConfigurator" // SIERRA-ADD - SUI
+	sui_width = 575 // SIERRA-ADD - SUI
+	sui_height = 700 // SIERRA-ADD - SUI
 
 /datum/nano_module/program/computer_configurator/proc/build_configurator_data(mob/user)
 	var/list/data = program.get_header_data()

@@ -39,9 +39,9 @@
 /datum/nano_module/program/crew_monitor
 	name = "Crew monitor"
 	available_to_ai = TRUE
-	sui_interface_name = "CrewMonitor"
-	sui_width = 1100
-	sui_height = 800
+	sui_interface_name = "CrewMonitor" // SIERRA-ADD - SUI
+	sui_width = 1100 // SIERRA-ADD - SUI
+	sui_height = 800 // SIERRA-ADD - SUI
 	var/map_enabled = TRUE
 	var/map_z_level = null
 

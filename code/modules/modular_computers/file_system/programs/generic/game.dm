@@ -46,9 +46,9 @@
 // and should generally not be used, as such nano modules are hard to use on other places.
 /datum/nano_module/program/arcade_classic
 	name = "Classic Arcade"
-	sui_interface_name = "ArcadeClassic"
-	sui_width = 700
-	sui_height = 600
+	sui_interface_name = "ArcadeClassic" // SIERRA-ADD - SUI
+	sui_width = 700 // SIERRA-ADD - SUI
+	sui_height = 600 // SIERRA-ADD - SUI
 	available_to_ai = TRUE
 	var/player_mana			// Various variables specific to the nano module. In this case, the nano module is a simple arcade game, so the variables store health and other stats.
 	var/player_health
@@ -65,7 +65,7 @@
 
 // ui_interact handles transfer of data to NanoUI. Keep in mind that data you pass from here is actually sent to the client. In other words, don't send anything you don't want a client
 // to see, and don't send unnecessarily large amounts of data (due to laginess).
-/datum/nano_module/program/arcade_classic/proc/build_arcade_data(mob/user)
+/datum/nano_module/program/arcade_classic/proc/build_arcade_data(mob/user) // SIERRA-ADD - SUI
 	var/list/data = host.initial_data(program)
 	data["src"] = "\ref[src]" //[SIERRA-ADD]
 	data["player_health"] = player_health
@@ -78,7 +78,7 @@
 	data["wolfenstein_mode"] = wolfenstein_mode
 	return data
 
-/datum/nano_module/program/arcade_classic/sui_data(mob/user)
+/datum/nano_module/program/arcade_classic/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_arcade_data(user)
 
 /datum/nano_module/program/arcade_classic/proc/perform_turn(action)
@@ -115,7 +115,7 @@
 		return TRUE
 	return FALSE
 
-/datum/nano_module/program/arcade_classic/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/arcade_classic/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	return perform_turn(action)
 
 /datum/nano_module/program/arcade_classic/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)

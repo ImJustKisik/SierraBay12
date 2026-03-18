@@ -69,11 +69,11 @@
 
 /datum/nano_module/program/computer_dos
 	name = "DoS Traffic Generator"
-	sui_interface_name = "ComputerDos"
-	sui_width = 400
-	sui_height = 250
+	sui_interface_name = "ComputerDos" // SIERRA-ADD - SUI
+	sui_width = 400 // SIERRA-ADD - SUI
+	sui_height = 250 // SIERRA-ADD - SUI
 
-/datum/nano_module/program/computer_dos/proc/build_dos_data(mob/user)
+/datum/nano_module/program/computer_dos/proc/build_dos_data(mob/user) // SIERRA-ADD - SUI
 	if(!ntnet_global)
 		return list()
 	var/datum/computer_file/program/ntnet_dos/PRG = program

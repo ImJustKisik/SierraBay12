@@ -22,9 +22,9 @@
 /datum/nano_module/program/docking
 	name = "Docking Control program"
 	available_to_ai = TRUE
-	sui_interface_name = "Docking"
-	sui_width = 600
-	sui_height = 450
+	sui_interface_name = "Docking" // SIERRA-ADD - SUI
+	sui_width = 600 // SIERRA-ADD - SUI
+	sui_height = 450 // SIERRA-ADD - SUI
 	var/list/docking_controllers = list() //list of tags
 
 /datum/nano_module/program/docking/New(datum/host, topic_manager)

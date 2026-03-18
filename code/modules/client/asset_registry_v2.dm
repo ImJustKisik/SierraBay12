@@ -25,9 +25,9 @@
 		"ondemand_packs" = 0,
 		"ondemand_bytes" = 0
 	)
-	var/ui_watch_mode_enabled = FALSE
-	var/ui_watch_mode_interval = 20
-	var/ui_watch_mode_generation = 0
+	var/ui_watch_mode_enabled = FALSE // SIERRA-ADD - SUI
+	var/ui_watch_mode_interval = 20 // SIERRA-ADD - SUI
+	var/ui_watch_mode_generation = 0 // SIERRA-ADD - SUI
 
 /client/proc/asset_v2_dev_reset_state()
 	cache.Cut()
@@ -60,7 +60,7 @@
 			ui.reload_shell()
 			.++
 
-/client/proc/asset_v2_dev_collect_open_uis()
+/client/proc/asset_v2_dev_collect_open_uis() // SIERRA-ADD - SUI
 	. = list()
 	var/mob/current_mob = mob
 	if(!current_mob)
@@ -93,7 +93,7 @@
 				"extra" = ui.interface || "(no interface)"
 			))
 
-/client/proc/reload_open_ui_windows()
+/client/proc/reload_open_ui_windows() // SIERRA-ADD - SUI
 	set category = "Debug"
 	set name = "Reload Open UI Windows"
 	set desc = "Reload the HTML shells for your currently open NanoUI/SUI windows without rescanning assets."
@@ -106,7 +106,7 @@
 	to_chat(src, SPAN_NOTICE("Reloaded open UI windows: [reloaded_uis]."))
 	log_admin("[key_name_admin(client)] reloaded open UI windows: [reloaded_uis]")
 
-/client/proc/dev_hot_reload_ui_assets(announce = TRUE, log_action = TRUE)
+/client/proc/dev_hot_reload_ui_assets(announce = TRUE, log_action = TRUE) // SIERRA-ADD - SUI
 	var/client/client = usr?.client || src
 	var/singleton/asset_registry_v2/registry = get_asset_registry_v2()
 	registry.load()
@@ -126,7 +126,7 @@
 		"uis" = reloaded_uis
 	)
 
-/client/proc/run_ui_watch_mode(expected_generation)
+/client/proc/run_ui_watch_mode(expected_generation) // SIERRA-ADD - SUI
 	set waitfor = FALSE
 
 	while(ui_watch_mode_enabled && ui_watch_mode_generation == expected_generation)
@@ -135,7 +135,7 @@
 			break
 		dev_hot_reload_ui_assets(FALSE, FALSE)
 
-/client/proc/set_ui_watch_mode_interval()
+/client/proc/set_ui_watch_mode_interval() // SIERRA-ADD - SUI
 	set category = "Debug"
 	set name = "Set UI Watch Interval"
 	set desc = "Set the auto-reload interval for UI watch mode in deciseconds."
@@ -153,7 +153,7 @@
 	ui_watch_mode_interval = max(round(new_interval * 10), 1)
 	to_chat(src, SPAN_NOTICE("UI watch mode interval set to [round(ui_watch_mode_interval / 10, 0.1)] seconds."))
 
-/client/proc/toggle_ui_watch_mode()
+/client/proc/toggle_ui_watch_mode() // SIERRA-ADD - SUI
 	set category = "Debug"
 	set name = "Toggle UI Watch Mode"
 	set desc = "Continuously hot-reload changed UI assets and open UI windows on a timer."
@@ -180,7 +180,7 @@
 	log_admin("[key_name_admin(client)] enabled UI watch mode interval=[ui_watch_mode_interval]")
 	run_ui_watch_mode(current_generation)
 
-/client/proc/list_open_ui_windows()
+/client/proc/list_open_ui_windows() // SIERRA-ADD - SUI
 	set category = "Debug"
 	set name = "List Open UI Windows"
 	set desc = "Show all currently open NanoUI/SUI windows for this client."
@@ -227,7 +227,7 @@
 	lines += "</body></html>"
 	show_browser(src, jointext(lines, null), "window=open_ui_windows;size=920x520")
 
-/client/proc/reload_ui_assets()
+/client/proc/reload_ui_assets() // SIERRA-EDIT - SUI
 	set category = "Debug"
 	set name = "Reload UI Assets"
 	set desc = "Re-register changed NanoUI/SUI assets, reset your client-side UI cache, and reload your open interfaces."
@@ -1029,7 +1029,7 @@
 		asset_v2_debug("ensure_sui_interface_registered reused interface=[interface_name] logical_id=[logical_id]")
 		return logical_id
 
-	var/interface_file = file("mods/sui/js/sui_[safe_name].js")
+	var/interface_file = file("mods/sui/js/sui_[safe_name].js") // SIERRA-EDIT - SUI
 	if(!fexists(interface_file))
 		asset_v2_debug("ensure_sui_interface_registered missing interface=[interface_name] path=[interface_file]")
 		return null
@@ -1395,11 +1395,11 @@
 	register_file("nano.css.shared", 'nano/css/shared.css')
 	register_file("nano.css.icons", 'nano/css/icons.css')
 
-	register_file("sui.js.preact_min", 'mods/sui/js/libraries/preact.min.js')
-	register_file("sui.js.preact_hooks_min", 'mods/sui/js/libraries/preact-hooks.min.js')
-	register_dynamic_file("sui.js.core", "mods/sui/js/sui.js")
-	register_dynamic_file("sui.js.components", "mods/sui/js/sui_components.js")
-	register_dynamic_file("sui.js.ntos_common", "mods/sui/js/sui_ntos_common.js")
+	register_file("sui.js.preact_min", 'mods/sui/js/libraries/preact.min.js') // SIERRA-EDIT - SUI
+	register_file("sui.js.preact_hooks_min", 'mods/sui/js/libraries/preact-hooks.min.js') // SIERRA-EDIT - SUI
+	register_dynamic_file("sui.js.core", "mods/sui/js/sui.js") // SIERRA-EDIT - SUI
+	register_dynamic_file("sui.js.components", "mods/sui/js/sui_components.js") // SIERRA-EDIT - SUI
+	register_dynamic_file("sui.js.ntos_common", "mods/sui/js/sui_ntos_common.js") // SIERRA-ADD - SUI
 
 	define_pack(ASSET_PACK_CORE_BOOTSTRAP, list())
 	define_pack(ASSET_PACK_LOGIN_BRANDING, list(

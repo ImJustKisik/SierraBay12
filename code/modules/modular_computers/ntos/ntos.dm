@@ -1,3 +1,4 @@
+// SIERRA-EDIT - SUI - NTOS lifecycle adjusted for SUI program windows
 /datum/extension/interactive/ntos
 	base_type = /datum/extension/interactive/ntos
 	expected_type = /atom/movable

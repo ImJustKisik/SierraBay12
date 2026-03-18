@@ -19,9 +19,9 @@
 /datum/nano_module/program/deck_management
 	name = "Deck Management Program"
 	available_to_ai = TRUE
-	sui_interface_name = "DeckManagement"
-	sui_width = 700
-	sui_height = 800
+	sui_interface_name = "DeckManagement" // SIERRA-ADD - SUI
+	sui_width = 700 // SIERRA-ADD - SUI
+	sui_height = 800 // SIERRA-ADD - SUI
 	var/prog_state = DECK_HOME                       //Which menu we are in.
 	var/can_view_only = 0                            //Whether we are in view-only mode for the report viewer.
 	var/datum/shuttle/selected_shuttle               //Which shuttle is currently selected, if any.
@@ -44,7 +44,7 @@
 		my_log.unregister(src)
 	. = ..()
 
-/datum/nano_module/program/deck_management/proc/build_deck_management_data(mob/user)
+/datum/nano_module/program/deck_management/proc/build_deck_management_data(mob/user) // SIERRA-ADD - SUI
 	var/list/data = host.initial_data(program)
 	var/logs = SSshuttle.shuttle_logs
 
@@ -262,10 +262,10 @@
 			return TOPIC_HANDLED
 	return TOPIC_NOACTION
 
-/datum/nano_module/program/deck_management/sui_data(mob/user)
+/datum/nano_module/program/deck_management/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_deck_management_data(user)
 
-/datum/nano_module/program/deck_management/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/deck_management/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	var/mob/user = ui ? ui.user : null
 	return handle_deck_action(action, params, user) != TOPIC_NOACTION
 

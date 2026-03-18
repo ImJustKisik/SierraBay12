@@ -15,9 +15,9 @@
 /datum/nano_module/program/shields_monitor
 	name = "Shields monitor"
 	available_to_ai = TRUE
-	sui_interface_name = "ShieldsMonitor"
-	sui_width = 650
-	sui_height = 580
+	sui_interface_name = "ShieldsMonitor" // SIERRA-ADD - SUI
+	sui_width = 650 // SIERRA-ADD - SUI
+	sui_height = 580 // SIERRA-ADD - SUI
 	var/obj/machinery/power/shield_generator/active = null
 
 /datum/nano_module/program/shields_monitor/Destroy()

@@ -26,9 +26,9 @@
 /datum/nano_module/program/comm
 	name = "Command and Communications Program"
 	available_to_ai = TRUE
-	sui_interface_name = "Comm"
-	sui_width = 550
-	sui_height = 420
+	sui_interface_name = "Comm" // SIERRA-ADD - SUI
+	sui_width = 550 // SIERRA-ADD - SUI
+	sui_height = 420 // SIERRA-ADD - SUI
 	var/current_status = STATE_DEFAULT
 	var/msg_line1 = ""
 	var/msg_line2 = ""
@@ -50,7 +50,7 @@
 		return !!program.can_run(user)
 	return TRUE
 
-/datum/nano_module/program/comm/proc/build_comm_data(mob/user)
+/datum/nano_module/program/comm/proc/build_comm_data(mob/user) // SIERRA-ADD - SUI
 	var/list/data = host.initial_data(program)
 	var/authenticated = can_use_comm(user)
 
@@ -247,10 +247,10 @@
 			return TOPIC_HANDLED
 	return TOPIC_NOACTION
 
-/datum/nano_module/program/comm/sui_data(mob/user)
+/datum/nano_module/program/comm/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_comm_data(user)
 
-/datum/nano_module/program/comm/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/comm/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	return handle_comm_action(action, params, ui?.user) != TOPIC_NOACTION
 
 /datum/nano_module/program/comm/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)

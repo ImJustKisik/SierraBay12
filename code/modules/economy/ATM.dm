@@ -108,7 +108,7 @@
 	ui_interact_sui(user)
 	return TRUE
 
-/obj/machinery/atm/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1)
+/obj/machinery/atm/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1) // SIERRA-ADD - SUI
 	return ui_interact_sui(user)
 
 /obj/machinery/atm/interact(mob/user)
@@ -231,7 +231,7 @@
 	else
 		return
 
-/obj/machinery/atm/proc/get_atm_ui_data()
+/obj/machinery/atm/proc/get_atm_ui_data() // SIERRA-ADD - SUI
 	var/list/data = list()
 	data["machine_id"] = machine_id
 	data["authenticated"] = !!authenticated_account
@@ -270,7 +270,7 @@
 
 	return data
 
-/obj/machinery/atm/proc/ui_interact_sui(mob/user)
+/obj/machinery/atm/proc/ui_interact_sui(mob/user) // SIERRA-ADD - SUI
 	if(istype(user, /mob/living/silicon))
 		to_chat(user, "[icon2html(src, user)] [SPAN_WARNING("Artificial unit recognized. Artificial units do not currently receive monetary compensation, as per system banking regulation #1005.")]")
 		return
@@ -287,10 +287,10 @@
 	else
 		ui.push_data(ui_data)
 
-/obj/machinery/atm/sui_update(mob/user, datum/sui/ui)
+/obj/machinery/atm/sui_update(mob/user, datum/sui/ui) // SIERRA-ADD - SUI
 	ui.push_data(get_atm_ui_data())
 
-/obj/machinery/atm/proc/perform_atm_action(mob/user, choice, list/params)
+/obj/machinery/atm/proc/perform_atm_action(mob/user, choice, list/params) // SIERRA-ADD - SUI
 	switch(choice)
 		if("transfer")
 			if(authenticated_account)

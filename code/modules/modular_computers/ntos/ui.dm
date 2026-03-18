@@ -1,7 +1,7 @@
-/client
+/client // SIERRA-ADD - SUI
 	var/list/ntos_boot_sequences = list()
 
-/datum/extension/interactive/proc/sui_data(mob/user)
+/datum/extension/interactive/proc/sui_data(mob/user) // SIERRA-ADD - SUI
 	return null
 
 /// Operates NanoUI
@@ -39,7 +39,7 @@
 		ui.close()
 	ui_interact_sui(user, ui_key, force_open)
 
-/datum/extension/interactive/ntos/proc/build_main_menu_data()
+/datum/extension/interactive/ntos/proc/build_main_menu_data() // SIERRA-ADD - SUI
 	var/list/data = get_header_data()
 
 	var/datum/computer_file/data/autorun = get_file("autorun")
@@ -66,14 +66,14 @@
 
 	return data
 
-/datum/extension/interactive/ntos/proc/should_show_ntos_boot(client/C)
+/datum/extension/interactive/ntos/proc/should_show_ntos_boot(client/C) // SIERRA-ADD - SUI
 	if(!istype(C))
 		return FALSE
 	if(!islist(C.ntos_boot_sequences))
 		C.ntos_boot_sequences = list()
 	return !C.ntos_boot_sequences["NTOSMainMenu"]
 
-/datum/extension/interactive/ntos/proc/get_ntos_preload_logical_ids(singleton/asset_registry_v2/asset_registry_v2)
+/datum/extension/interactive/ntos/proc/get_ntos_preload_logical_ids(singleton/asset_registry_v2/asset_registry_v2) // SIERRA-ADD - SUI
 	var/list/logical_ids = list()
 	if(!asset_registry_v2)
 		return logical_ids
@@ -103,7 +103,7 @@
 
 	return logical_ids
 
-/datum/extension/interactive/ntos/proc/ui_interact_sui(mob/user, ui_key = "main", force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/extension/interactive/ntos/proc/ui_interact_sui(mob/user, ui_key = "main", force_open = 1, datum/topic_state/state = GLOB.default_state) // SIERRA-ADD - SUI
 	ui_key = ui_key || "main"
 
 	var/datum/sui/ui = SSnano.try_update_sui(user, src, ui_key)
@@ -118,13 +118,13 @@
 	else
 		ui.push_data(src.sui_data(user))
 
-/datum/extension/interactive/ntos/sui_data(mob/user)
+/datum/extension/interactive/ntos/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_main_menu_data()
 
-/datum/extension/interactive/ntos/sui_update(mob/user, datum/sui/ui)
+/datum/extension/interactive/ntos/sui_update(mob/user, datum/sui/ui) // SIERRA-ADD - SUI
 	ui.push_data(src.sui_data(user))
 
-/datum/extension/interactive/ntos/sui_verify_assets(datum/sui/ui, client/C)
+/datum/extension/interactive/ntos/sui_verify_assets(datum/sui/ui, client/C) // SIERRA-ADD - SUI
 	if(!istype(ui) || ui.interface != "NTOSMainMenu" || !istype(C))
 		return TRUE
 
@@ -145,7 +145,7 @@
 
 	return TRUE
 
-/datum/extension/interactive/ntos/sui_get_head_html(datum/sui/ui, singleton/asset_registry_v2/asset_registry_v2)
+/datum/extension/interactive/ntos/sui_get_head_html(datum/sui/ui, singleton/asset_registry_v2/asset_registry_v2) // SIERRA-ADD - SUI
 	if(!istype(ui) || ui.interface != "NTOSMainMenu")
 		return null
 
@@ -183,7 +183,7 @@
 		};
 	</script>"}
 
-/datum/extension/interactive/ntos/sui_act(action, list/params, datum/sui/ui)
+/datum/extension/interactive/ntos/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	var/mob/user = ui ? ui.user : null
 	switch(action)
 		if("kill_program")

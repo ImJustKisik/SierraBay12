@@ -163,9 +163,9 @@ var/global/nttransfer_uid = 0
 
 /datum/nano_module/program/computer_nttransfer
 	name = "NTNet P2P Transfer Client"
-	sui_interface_name = "NTTransfer"
-	sui_width = 575
-	sui_height = 700
+	sui_interface_name = "NTTransfer" // SIERRA-ADD - SUI
+	sui_width = 575 // SIERRA-ADD - SUI
+	sui_height = 700 // SIERRA-ADD - SUI
 
 /datum/nano_module/program/computer_nttransfer/proc/build_transfer_data(mob/user)
 	var/list/data = host.initial_data(program)

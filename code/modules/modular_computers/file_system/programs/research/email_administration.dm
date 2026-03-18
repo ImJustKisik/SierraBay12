@@ -15,9 +15,9 @@
 /datum/nano_module/program/email_administration
 	name = "Email Administration"
 	available_to_ai = TRUE
-	sui_interface_name = "EmailAdministration"
-	sui_width = 600
-	sui_height = 450
+	sui_interface_name = "EmailAdministration" // SIERRA-ADD - SUI
+	sui_width = 600 // SIERRA-ADD - SUI
+	sui_height = 450 // SIERRA-ADD - SUI
 	var/datum/computer_file/data/email_account/current_account = null
 	var/datum/computer_file/data/email_message/current_message = null
 	var/error = ""
@@ -29,7 +29,7 @@
 		return
 	return os
 
-/datum/nano_module/program/email_administration/proc/build_email_admin_data(mob/user)
+/datum/nano_module/program/email_administration/proc/build_email_admin_data(mob/user) // SIERRA-ADD - SUI
 	var/list/data = host.initial_data(program)
 
 	if(!user.skill_check(SKILL_COMPUTER, SKILL_BASIC))
@@ -154,10 +154,10 @@
 			return TOPIC_HANDLED
 	return TOPIC_NOACTION
 
-/datum/nano_module/program/email_administration/sui_data(mob/user)
+/datum/nano_module/program/email_administration/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_email_admin_data(user)
 
-/datum/nano_module/program/email_administration/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/email_administration/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	return handle_email_admin_action(action, params, ui?.user) != TOPIC_NOACTION
 
 /datum/nano_module/program/email_administration/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)

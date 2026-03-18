@@ -1,3 +1,4 @@
+/* SIERRA-EDIT - SUI - modern NanoUI shell polish */
 body {
     background: no-repeat center/75% url(nt-logo.png);
     background-color: #262626;
@@ -39,6 +40,7 @@ body {
     height: 24px;
     background: url(uiTitleFluff.png) 50% 50% no-repeat;
 }
+/* /SIERRA-EDIT - SUI */
 
 #uiTitle.icon {
     padding: 6px 8px 6px 42px;

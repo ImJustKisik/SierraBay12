@@ -20,9 +20,9 @@
 
 /datum/nano_module/program/munitions
 	name = "Munitions Control Program"
-	sui_interface_name = "Munitions"
-	sui_width = 500
-	sui_height = 600
+	sui_interface_name = "Munitions" // SIERRA-ADD - SUI
+	sui_width = 500 // SIERRA-ADD - SUI
+	sui_height = 600 // SIERRA-ADD - SUI
 	var/access_req = list(access_bridge)
 	var/list/monitored_munitions = list()
 	var/obj/overmap/visitable/linked = null
@@ -52,7 +52,7 @@
 			output += interface
 	return output
 
-/datum/nano_module/program/munitions/proc/build_munitions_data(mob/user)
+/datum/nano_module/program/munitions/proc/build_munitions_data(mob/user) // SIERRA-ADD - SUI
 	var/list/data = host.initial_data(program)
 	var/authenticated = check_access(user, access_req)
 
@@ -113,10 +113,10 @@
 			return TOPIC_NOACTION
 	return TOPIC_HANDLED
 
-/datum/nano_module/program/munitions/sui_data(mob/user)
+/datum/nano_module/program/munitions/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_munitions_data(user)
 
-/datum/nano_module/program/munitions/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/munitions/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	var/mob/user = ui ? ui.user : null
 	return handle_munitions_action(action, params, user) != TOPIC_NOACTION
 

@@ -237,11 +237,11 @@
 
 /datum/nano_module/program/computer_chatclient
 	name = "NTNet Relay Chat Client"
-	sui_interface_name = "NTNRCClient"
-	sui_width = 575
-	sui_height = 700
+	sui_interface_name = "NTNRCClient" // SIERRA-ADD - SUI
+	sui_width = 575 // SIERRA-ADD - SUI
+	sui_height = 700 // SIERRA-ADD - SUI
 
-/datum/nano_module/program/computer_chatclient/proc/build_chatclient_data(mob/user)
+/datum/nano_module/program/computer_chatclient/proc/build_chatclient_data(mob/user) // SIERRA-ADD - SUI
 	if(!ntnet_global || !ntnet_global.chat_channels)
 		return null
 
@@ -288,10 +288,10 @@
 		data["is_operator"] = C.operator_mode || C.netadmin_mode
 	return data
 
-/datum/nano_module/program/computer_chatclient/sui_data(mob/user)
+/datum/nano_module/program/computer_chatclient/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_chatclient_data(user)
 
-/datum/nano_module/program/computer_chatclient/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/computer_chatclient/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	var/datum/computer_file/program/chatclient/C = program
 	var/mob/user = ui ? ui.user : null
 	if(!istype(C))

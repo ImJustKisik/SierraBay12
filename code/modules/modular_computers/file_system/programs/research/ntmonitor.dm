@@ -15,24 +15,24 @@
 
 /datum/nano_module/program/computer_ntnetmonitor
 	name = "NTNet Diagnostics and Monitoring"
-	sui_interface_name = "NTNetMonitor"
-	sui_width = 575
-	sui_height = 700
+	sui_interface_name = "NTNetMonitor" // SIERRA-ADD - SUI
+	sui_width = 575 // SIERRA-ADD - SUI
+	sui_height = 700 // SIERRA-ADD - SUI
 	available_to_ai = TRUE
-	var/list/pending_wireless_shutdown = list()
+	var/list/pending_wireless_shutdown = list() // SIERRA-ADD - SUI
 
-/datum/nano_module/program/computer_ntnetmonitor/proc/get_confirm_key(mob/user)
+/datum/nano_module/program/computer_ntnetmonitor/proc/get_confirm_key(mob/user) // SIERRA-ADD - SUI
 	if(!user)
 		return null
 	return user.ckey || "\ref[user]"
 
-/datum/nano_module/program/computer_ntnetmonitor/proc/is_wireless_shutdown_pending(mob/user)
+/datum/nano_module/program/computer_ntnetmonitor/proc/is_wireless_shutdown_pending(mob/user) // SIERRA-ADD - SUI
 	var/key = get_confirm_key(user)
 	if(!key || !islist(pending_wireless_shutdown))
 		return FALSE
 	return !!pending_wireless_shutdown[key]
 
-/datum/nano_module/program/computer_ntnetmonitor/proc/set_wireless_shutdown_pending(mob/user, pending)
+/datum/nano_module/program/computer_ntnetmonitor/proc/set_wireless_shutdown_pending(mob/user, pending) // SIERRA-ADD - SUI
 	var/key = get_confirm_key(user)
 	if(!key)
 		return
@@ -43,7 +43,7 @@
 	else
 		pending_wireless_shutdown -= key
 
-/datum/nano_module/program/computer_ntnetmonitor/proc/build_ntnetmonitor_data(mob/user)
+/datum/nano_module/program/computer_ntnetmonitor/proc/build_ntnetmonitor_data(mob/user) // SIERRA-ADD - SUI
 	if(!ntnet_global)
 		return null
 	var/list/data = host.initial_data(program)
@@ -72,10 +72,10 @@
 
 	return data
 
-/datum/nano_module/program/computer_ntnetmonitor/sui_data(mob/user)
+/datum/nano_module/program/computer_ntnetmonitor/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_ntnetmonitor_data(user)
 
-/datum/nano_module/program/computer_ntnetmonitor/proc/perform_monitor_action(action, mob/user, datum/topic_state/state = null, list/params = null)
+/datum/nano_module/program/computer_ntnetmonitor/proc/perform_monitor_action(action, mob/user, datum/topic_state/state = null, list/params = null) // SIERRA-ADD - SUI
 	if(!user)
 		return FALSE
 	if(!user.skill_check(SKILL_COMPUTER, SKILL_BASIC))
@@ -139,7 +139,7 @@
 		return TRUE
 	return FALSE
 
-/datum/nano_module/program/computer_ntnetmonitor/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/computer_ntnetmonitor/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	return perform_monitor_action(action, ui?.user, ui?.state, params)
 
 /datum/nano_module/program/computer_ntnetmonitor/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)

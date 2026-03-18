@@ -1,3 +1,4 @@
+<!-- SIERRA-ADD - SUI - NTOS UI design guidance -->
 # NTOS UI Design Guide
 
 This document defines the visual and interaction rules for modernized NTOS interfaces in SUI.

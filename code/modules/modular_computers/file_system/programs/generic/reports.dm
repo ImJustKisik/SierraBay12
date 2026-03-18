@@ -16,9 +16,9 @@
 
 /datum/nano_module/program/reports
 	name = "Report Editor"
-	sui_interface_name = "Reports"
-	sui_width = 700
-	sui_height = 800
+	sui_interface_name = "Reports" // SIERRA-ADD - SUI
+	sui_width = 700 // SIERRA-ADD - SUI
+	sui_height = 800 // SIERRA-ADD - SUI
 
 	/// Whether we are in view-only mode.
 	var/can_view_only = FALSE
@@ -28,7 +28,7 @@
 	var/datum/computer_file/report/saved_report
 	var/prog_state = REPORTS_VIEW
 
-/datum/nano_module/program/reports/proc/build_reports_data(mob/user)
+/datum/nano_module/program/reports/proc/build_reports_data(mob/user) // SIERRA-ADD - SUI
 	var/list/data = host.initial_data(program)
 	data["prog_state"] = prog_state
 	switch(prog_state)
@@ -131,10 +131,10 @@
 			return TOPIC_HANDLED
 	return TOPIC_NOACTION
 
-/datum/nano_module/program/reports/sui_data(mob/user)
+/datum/nano_module/program/reports/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_reports_data(user)
 
-/datum/nano_module/program/reports/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/reports/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	return handle_reports_action(action, params, ui?.user) != TOPIC_NOACTION
 
 /datum/nano_module/program/reports/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, state = GLOB.default_state)

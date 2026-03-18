@@ -14,13 +14,13 @@
 /datum/nano_module/program/records
 	name = "Crew Records"
 	available_to_ai = TRUE
-	sui_interface_name = "CrewRecords"
-	sui_width = 700
-	sui_height = 540
+	sui_interface_name = "CrewRecords" // SIERRA-ADD - SUI
+	sui_width = 700 // SIERRA-ADD - SUI
+	sui_height = 540 // SIERRA-ADD - SUI
 	var/datum/computer_file/report/crew_record/active_record
 	var/message = null
 
-/datum/nano_module/program/records/proc/build_records_data(mob/user)
+/datum/nano_module/program/records/proc/build_records_data(mob/user) // SIERRA-ADD - SUI
 	var/list/data = host.initial_data(program)
 	var/list/user_access = get_record_access(user)
 
@@ -109,10 +109,10 @@
 			return TOPIC_HANDLED
 	return TOPIC_NOACTION
 
-/datum/nano_module/program/records/sui_data(mob/user)
+/datum/nano_module/program/records/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_records_data(user)
 
-/datum/nano_module/program/records/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/records/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	return handle_records_action(action, params, ui?.user) != TOPIC_NOACTION
 
 /datum/nano_module/program/records/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, state = GLOB.default_state)

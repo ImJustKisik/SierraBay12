@@ -17,9 +17,9 @@
 /datum/nano_module/program/atmos_control
 	name = "Atmospherics Control"
 	available_to_ai = TRUE
-	sui_interface_name = "AtmosControl"
-	sui_width = 625
-	sui_height = 625
+	sui_interface_name = "AtmosControl" // SIERRA-ADD - SUI
+	sui_width = 625 // SIERRA-ADD - SUI
+	sui_height = 625 // SIERRA-ADD - SUI
 	var/obj/access = new()
 	var/emagged = FALSE
 	var/ui_ref

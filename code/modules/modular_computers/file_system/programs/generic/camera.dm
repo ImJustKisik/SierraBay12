@@ -41,9 +41,9 @@
 /datum/nano_module/program/camera_monitor
 	name = "Camera Monitoring program"
 	available_to_ai = TRUE
-	sui_interface_name = "CameraMonitor"
-	sui_width = 900
-	sui_height = 800
+	sui_interface_name = "CameraMonitor" // SIERRA-ADD - SUI
+	sui_width = 900 // SIERRA-ADD - SUI
+	sui_height = 800 // SIERRA-ADD - SUI
 	var/obj/machinery/camera/current_camera = null
 	var/current_network = null
 	var/list/feed_screen_states = list()
@@ -65,7 +65,7 @@
 	return FALSE
 
 
-/datum/nano_module/program/camera_monitor/ui_interact_sui(mob/user, ui_key = "main", force_open = 1, master_ui = null, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/camera_monitor/ui_interact_sui(mob/user, ui_key = "main", force_open = 1, master_ui = null, datum/topic_state/state = GLOB.default_state) // SIERRA-ADD - SUI
 	..()
 	var/datum/sui/ui = get_existing_sui_ui(user, ui_key)
 	if(current_camera)

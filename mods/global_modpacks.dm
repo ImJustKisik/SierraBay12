@@ -1,4 +1,5 @@
 // SIERRA TODO: GET RID OF IT!!!
+// SIERRA-ADD - SUI - register SUI modpack
 #include "ai/_ai_includes.dm"
 #include "adherent_discharge/_adherent_discharge_includes.dm"
 #include "body_markings/_body_markings_includes.dm"

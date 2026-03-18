@@ -107,9 +107,9 @@
 
 /datum/nano_module/program/scanner
 	name = "Scanner"
-	sui_interface_name = "Scanner"
-	sui_width = 600
-	sui_height = 700
+	sui_interface_name = "Scanner" // SIERRA-ADD - SUI
+	sui_width = 600 // SIERRA-ADD - SUI
+	sui_height = 700 // SIERRA-ADD - SUI
 
 /datum/nano_module/program/scanner/proc/build_scanner_data(mob/user)
 	var/list/data = host.initial_data(program)

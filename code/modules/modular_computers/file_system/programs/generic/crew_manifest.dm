@@ -14,9 +14,9 @@
 /datum/nano_module/program/crew_manifest
 	name = "Crew Manifest"
 	available_to_ai = TRUE
-	sui_interface_name = "CrewManifest"
-	sui_width = 800
-	sui_height = 600
+	sui_interface_name = "CrewManifest" // SIERRA-ADD - SUI
+	sui_width = 800 // SIERRA-ADD - SUI
+	sui_height = 600 // SIERRA-ADD - SUI
 
 /datum/nano_module/program/crew_manifest/ui_interact_sui(mob/user, ui_key = "main", force_open = 1, master_ui = null, datum/topic_state/state = GLOB.default_state)
 	return ..()

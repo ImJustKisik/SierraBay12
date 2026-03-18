@@ -111,11 +111,11 @@
 
 /datum/nano_module/program/access_decrypter
 	name = "NTNet Access Decrypter"
-	sui_interface_name = "AccessDecrypter"
-	sui_width = 550
-	sui_height = 400
+	sui_interface_name = "AccessDecrypter" // SIERRA-ADD - SUI
+	sui_width = 550 // SIERRA-ADD - SUI
+	sui_height = 400 // SIERRA-ADD - SUI
 
-/datum/nano_module/program/access_decrypter/proc/build_decrypter_data(mob/user)
+/datum/nano_module/program/access_decrypter/proc/build_decrypter_data(mob/user) // SIERRA-ADD - SUI
 	if(!ntnet_global)
 		return list()
 	var/datum/computer_file/program/access_decrypter/PRG = program

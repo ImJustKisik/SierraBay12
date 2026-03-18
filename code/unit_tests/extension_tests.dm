@@ -578,6 +578,7 @@
 		list("interface" = "Docking", "module" = /datum/nano_module/program/docking),
 		list("interface" = "ArcadeClassic", "module" = /datum/nano_module/program/arcade_classic),
 		list("interface" = "Scanner", "module" = /datum/nano_module/program/scanner),
+		// [SIERRA-ADD] - SUI - migrated interface coverage
 		list("interface" = "Library", "module" = /datum/nano_module/program/library),
 		list("interface" = "DeckManagement", "module" = /datum/nano_module/program/deck_management),
 		list("interface" = "AIDiag", "module" = /datum/nano_module/program/computer_aidiag),
@@ -599,6 +600,7 @@
 		list("interface" = "EmailAdministration", "module" = /datum/nano_module/program/email_administration),
 		list("interface" = "EmailClient", "module" = /datum/nano_module/program/email_client),
 		list("interface" = "Supply", "module" = /datum/nano_module/program/supply),
+		// [/SIERRA-ADD] - SUI
 		list("interface" = "Comm", "module" = /datum/nano_module/program/comm),
 		list("interface" = "FileManager", "module" = /datum/nano_module/program/computer_filemanager),
 		list("interface" = "CrewMonitor", "module" = /datum/nano_module/program/crew_monitor),
@@ -632,7 +634,7 @@
 /datum/unit_test/nanoui_sui_compat_interface_asset_shall_register
 	name = "NanoUI Compat - NanoCompat interface asset shall register"
 
-/datum/unit_test/nanoui_sui_compat_interface_asset_shall_register/start_test()
+/datum/unit_test/nanoui_sui_compat_interface_asset_shall_register/start_test() // SIERRA-EDIT - SUI
 	var/singleton/asset_registry_v2/registry = GET_SINGLETON(/singleton/asset_registry_v2)
 	var/number_of_failures = 0
 	var/datum/asset_entry_v2/nanocompat_entry
@@ -657,7 +659,7 @@
 		pass("All assertions passed.")
 	return TRUE
 
-/datum/unit_test/sui_common_assets_shall_resolve_from_modpack
+/datum/unit_test/sui_common_assets_shall_resolve_from_modpack // SIERRA-ADD - SUI
 	name = "SUI - common assets shall resolve from mods/sui"
 
 /datum/unit_test/sui_common_assets_shall_resolve_from_modpack/start_test()

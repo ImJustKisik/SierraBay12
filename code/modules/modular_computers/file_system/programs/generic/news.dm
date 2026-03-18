@@ -15,9 +15,9 @@
 
 /datum/nano_module/program/newscast
 	name = "Newscast"
-	sui_interface_name = "Newscast"
-	sui_width = 450
-	sui_height = 600
+	sui_interface_name = "Newscast" // SIERRA-ADD - SUI
+	sui_width = 450 // SIERRA-ADD - SUI
+	sui_height = 600 // SIERRA-ADD - SUI
 	var/prog_state = NEWSCAST_HOME
 	var/notifs_enabled = TRUE
 	var/datum/feed_channel/active_channel

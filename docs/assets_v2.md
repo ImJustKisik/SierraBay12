@@ -1,3 +1,4 @@
+<!-- SIERRA-EDIT - SUI - asset_v2 documentation updated for SUI migration -->
 # Assets V2
 
 ## Current Audit

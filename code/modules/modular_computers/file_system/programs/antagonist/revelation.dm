@@ -64,11 +64,11 @@
 
 /datum/nano_module/program/revelation
 	name = "Revelation Virus"
-	sui_interface_name = "Revelation"
-	sui_width = 400
-	sui_height = 250
+	sui_interface_name = "Revelation" // SIERRA-ADD - SUI
+	sui_width = 400 // SIERRA-ADD - SUI
+	sui_height = 250 // SIERRA-ADD - SUI
 
-/datum/nano_module/program/revelation/proc/build_revelation_data(mob/user)
+/datum/nano_module/program/revelation/proc/build_revelation_data(mob/user) // SIERRA-ADD - SUI
 	var/datum/computer_file/program/revelation/PRG = program
 	if(!istype(PRG))
 		return list()

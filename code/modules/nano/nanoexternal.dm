@@ -1,3 +1,4 @@
+// SIERRA-EDIT - SUI - nanoclose handles both NanoUI and SUI windows
  // This file contains all Nano procs/definitions for external classes/objects
 
  /**

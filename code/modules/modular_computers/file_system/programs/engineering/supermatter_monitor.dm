@@ -31,9 +31,9 @@
 /datum/nano_module/program/supermatter_monitor
 	name = "Supermatter monitor"
 	available_to_ai = TRUE
-	sui_interface_name = "SupermatterMonitor"
-	sui_width = 720
-	sui_height = 560
+	sui_interface_name = "SupermatterMonitor" // SIERRA-ADD - SUI
+	sui_width = 720 // SIERRA-ADD - SUI
+	sui_height = 560 // SIERRA-ADD - SUI
 	var/list/supermatters
 	var/obj/machinery/power/supermatter/active = null		// Currently selected supermatter crystal.
 	var/screen = SM_MONITOR_SCREEN_MAIN // Which screen the monitor is currently on

@@ -17,9 +17,9 @@
 /datum/nano_module/program/rcon
 	name = "Power RCON"
 	available_to_ai = TRUE
-	sui_interface_name = "Rcon"
-	sui_width = 700
-	sui_height = 540
+	sui_interface_name = "Rcon" // SIERRA-ADD - SUI
+	sui_width = 700 // SIERRA-ADD - SUI
+	sui_height = 540 // SIERRA-ADD - SUI
 	var/list/known_SMESs = null
 	var/list/known_breakers = null
 	// Allows you to hide specific parts of the UI

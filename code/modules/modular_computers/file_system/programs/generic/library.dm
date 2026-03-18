@@ -22,15 +22,15 @@ The answer was five and a half years -ZeroBits
 /datum/nano_module/program/library
 	name = "Library"
 	available_to_ai = TRUE
-	sui_interface_name = "Library"
-	sui_width = 575
-	sui_height = 700
+	sui_interface_name = "Library" // SIERRA-ADD - SUI
+	sui_width = 575 // SIERRA-ADD - SUI
+	sui_height = 700 // SIERRA-ADD - SUI
 	var/error_message = ""
 	var/current_book
 	var/obj/machinery/libraryscanner/scanner
 	var/sort_by = "id"
 
-/datum/nano_module/program/library/proc/build_library_data(mob/user)
+/datum/nano_module/program/library/proc/build_library_data(mob/user) // SIERRA-ADD - SUI
 	var/list/data = host.initial_data(program)
 
 	if(error_message)
@@ -164,10 +164,10 @@ The answer was five and a half years -ZeroBits
 			return TOPIC_HANDLED
 	return TOPIC_NOACTION
 
-/datum/nano_module/program/library/sui_data(mob/user)
+/datum/nano_module/program/library/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_library_data(user)
 
-/datum/nano_module/program/library/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/library/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	var/mob/user = ui ? ui.user : null
 	return handle_library_action(action, params, user) != TOPIC_NOACTION
 

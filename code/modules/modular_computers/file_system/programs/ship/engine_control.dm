@@ -13,9 +13,9 @@
 
 /datum/nano_module/program/ship/engine_control
 	name = "Engine control"
-	sui_interface_name = "EngineControl"
-	sui_width = 450
-	sui_height = 530
+	sui_interface_name = "EngineControl" // SIERRA-ADD - SUI
+	sui_width = 450 // SIERRA-ADD - SUI
+	sui_height = 530 // SIERRA-ADD - SUI
 	var/display_state = "status"
 
 /datum/nano_module/program/ship/engine_control/proc/build_engine_data(mob/user)

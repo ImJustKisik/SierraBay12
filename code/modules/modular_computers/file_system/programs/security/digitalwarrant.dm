@@ -19,12 +19,12 @@ LEGACY_RECORD_STRUCTURE(all_warrants, warrant)
 /datum/nano_module/program/digitalwarrant
 	name = "Warrant Assistant"
 	available_to_ai = TRUE
-	sui_interface_name = "DigitalWarrant"
-	sui_width = 700
-	sui_height = 450
+	sui_interface_name = "DigitalWarrant" // SIERRA-ADD - SUI
+	sui_width = 700 // SIERRA-ADD - SUI
+	sui_height = 450 // SIERRA-ADD - SUI
 	var/datum/computer_file/data/warrant/activewarrant
 
-/datum/nano_module/program/digitalwarrant/proc/build_warrant_data(mob/user)
+/datum/nano_module/program/digitalwarrant/proc/build_warrant_data(mob/user) // SIERRA-ADD - SUI
 	var/list/data = host.initial_data(program)
 
 	if(activewarrant)
@@ -61,7 +61,7 @@ LEGACY_RECORD_STRUCTURE(all_warrants, warrant)
 	data["has_printer"] = !!program?.computer?.has_component(PART_PRINTER)
 	return data
 
-/datum/nano_module/program/digitalwarrant/proc/get_authenticated_security_id(mob/user)
+/datum/nano_module/program/digitalwarrant/proc/get_authenticated_security_id(mob/user) // SIERRA-ADD - SUI
 	if(!istype(user))
 		return null
 	var/obj/item/card/id/I = user.GetIdCard()
@@ -70,7 +70,7 @@ LEGACY_RECORD_STRUCTURE(all_warrants, warrant)
 		return null
 	return I
 
-/datum/nano_module/program/digitalwarrant/proc/handle_warrant_action(action, list/params, mob/user)
+/datum/nano_module/program/digitalwarrant/proc/handle_warrant_action(action, list/params, mob/user) // SIERRA-ADD - SUI
 	params = params || list()
 
 	switch(action)
@@ -217,10 +217,10 @@ LEGACY_RECORD_STRUCTURE(all_warrants, warrant)
 			return TOPIC_HANDLED
 	return TOPIC_NOACTION
 
-/datum/nano_module/program/digitalwarrant/sui_data(mob/user)
+/datum/nano_module/program/digitalwarrant/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_warrant_data(user)
 
-/datum/nano_module/program/digitalwarrant/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/digitalwarrant/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	return handle_warrant_action(action, params, ui?.user) != TOPIC_NOACTION
 
 /datum/nano_module/program/digitalwarrant/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)

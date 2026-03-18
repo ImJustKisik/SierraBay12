@@ -12,15 +12,15 @@
 
 /datum/nano_module/program/card_mod
 	name = "ID card modification program"
-	sui_interface_name = "CardMod"
-	sui_width = 600
-	sui_height = 700
+	sui_interface_name = "CardMod" // SIERRA-ADD - SUI
+	sui_width = 600 // SIERRA-ADD - SUI
+	sui_height = 700 // SIERRA-ADD - SUI
 	var/mod_mode = 1
 	var/is_centcom = 0
 	var/show_assignments = 0
 	var/selected_branch = null // Track currently selected branch for rank selection
 
-/datum/nano_module/program/card_mod/proc/build_card_mod_data(mob/user)
+/datum/nano_module/program/card_mod/proc/build_card_mod_data(mob/user) // SIERRA-ADD - SUI
 	var/list/data = host.initial_data(program)
 	var/obj/item/stock_parts/computer/card_slot/card_slot = program.computer.get_component(PART_CARD)
 
@@ -94,10 +94,10 @@
 			data["regions"] = regions
 	return data
 
-/datum/nano_module/program/card_mod/sui_data(mob/user)
+/datum/nano_module/program/card_mod/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_card_mod_data(user)
 
-/datum/nano_module/program/card_mod/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/card_mod/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	var/datum/computer_file/program/card_mod/card_program = program
 	var/mob/user = ui ? ui.user : null
 	if(!istype(card_program))

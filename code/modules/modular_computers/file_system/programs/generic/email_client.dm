@@ -61,9 +61,9 @@
 /datum/nano_module/program/email_client
 	name = "Email Client"
 	available_to_ai = TRUE
-	sui_interface_name = "EmailClient"
-	sui_width = 600
-	sui_height = 450
+	sui_interface_name = "EmailClient" // SIERRA-ADD - SUI
+	sui_width = 600 // SIERRA-ADD - SUI
+	sui_height = 450 // SIERRA-ADD - SUI
 	var/stored_login = ""
 	var/stored_password = ""
 	var/error = ""
@@ -186,7 +186,7 @@
 			log_out()
 			error = "This account has been suspended. Please contact the system administrator for assistance."
 
-/datum/nano_module/program/email_client/proc/build_email_client_data(mob/user)
+/datum/nano_module/program/email_client/proc/build_email_client_data(mob/user) // SIERRA-ADD - SUI
 	var/list/data = host.initial_data(program)
 
 	sync_email_client_state()
@@ -539,10 +539,10 @@
 			return TOPIC_HANDLED
 	return TOPIC_NOACTION
 
-/datum/nano_module/program/email_client/sui_data(mob/user)
+/datum/nano_module/program/email_client/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_email_client_data(user)
 
-/datum/nano_module/program/email_client/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/email_client/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	return handle_email_client_action(action, params, ui?.user) != TOPIC_NOACTION
 
 /datum/nano_module/program/email_client/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)

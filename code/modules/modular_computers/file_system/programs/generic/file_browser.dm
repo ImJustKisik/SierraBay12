@@ -151,11 +151,11 @@
 		return handle_filemanager_action("print_file", null, usr)
 /datum/nano_module/program/computer_filemanager
 	name = "NTOS File Manager"
-	sui_interface_name = "FileManager"
-	sui_width = 600
-	sui_height = 700
+	sui_interface_name = "FileManager" // SIERRA-ADD - SUI
+	sui_width = 600 // SIERRA-ADD - SUI
+	sui_height = 700 // SIERRA-ADD - SUI
 
-/datum/nano_module/program/computer_filemanager/proc/build_filemanager_data(mob/user)
+/datum/nano_module/program/computer_filemanager/proc/build_filemanager_data(mob/user) // SIERRA-ADD - SUI
 	var/list/data = host.initial_data(program)
 	var/datum/computer_file/program/filemanager/PRG = program
 	if(!istype(PRG))
@@ -215,10 +215,10 @@
 				data["usbfiles"] = usbfiles
 	return data
 
-/datum/nano_module/program/computer_filemanager/sui_data(mob/user)
+/datum/nano_module/program/computer_filemanager/sui_data(mob/user) // SIERRA-ADD - SUI
 	return build_filemanager_data(user)
 
-/datum/nano_module/program/computer_filemanager/sui_act(action, list/params, datum/sui/ui)
+/datum/nano_module/program/computer_filemanager/sui_act(action, list/params, datum/sui/ui) // SIERRA-ADD - SUI
 	var/datum/computer_file/program/filemanager/PRG = program
 	if(!istype(PRG))
 		return FALSE

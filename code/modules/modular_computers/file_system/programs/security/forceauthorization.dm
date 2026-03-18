@@ -16,9 +16,9 @@
 /datum/nano_module/program/forceauthorization
 	name = "Use of Force Authorization Manager"
 	available_to_ai = TRUE
-	sui_interface_name = "ForceAuthorization"
-	sui_width = 700
-	sui_height = 450
+	sui_interface_name = "ForceAuthorization" // SIERRA-ADD - SUI
+	sui_width = 700 // SIERRA-ADD - SUI
+	sui_height = 450 // SIERRA-ADD - SUI
 
 /datum/nano_module/program/forceauthorization/proc/build_forceauth_data(mob/user)
 	var/list/data = host.initial_data(program)

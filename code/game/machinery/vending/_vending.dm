@@ -328,7 +328,7 @@
 	if (currently_vending)
 		data["product"] = currently_vending.item_name
 		data["price"] = currently_vending.price
-		data["image"] = get_product_icon_b64(currently_vending.item_path)
+		data["image"] = get_product_icon_b64(currently_vending.item_path) // SIERRA-ADD - SUI
 
 	var/list/listed_products = list()
 	for (var/key = 1 to length(product_records))
@@ -340,7 +340,7 @@
 			"name" = product.item_name,
 			"price" = product.price,
 			"color" = product.display_color,
-			"category" = product.category,
+			"category" = product.category, // SIERRA-ADD - SUI
 			"amount" = product.get_amount(),
 			"icon" = get_product_icon_b64(product.item_path)
 		)))
@@ -372,7 +372,7 @@
 	return data_uri
 
 
-/obj/machinery/vending/proc/ui_interact_sui(mob/user)
+/obj/machinery/vending/proc/ui_interact_sui(mob/user) // SIERRA-ADD - SUI
 	if(!user)
 		return
 	user.set_machine(src)

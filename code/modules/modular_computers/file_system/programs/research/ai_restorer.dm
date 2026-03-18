@@ -106,9 +106,9 @@
 
 /datum/nano_module/program/computer_aidiag
 	name = "AI Maintenance Utility"
-	sui_interface_name = "AIDiag"
-	sui_width = 600
-	sui_height = 400
+	sui_interface_name = "AIDiag" // SIERRA-ADD - SUI
+	sui_width = 600 // SIERRA-ADD - SUI
+	sui_height = 400 // SIERRA-ADD - SUI
 
 /datum/nano_module/program/computer_aidiag/proc/build_aidiag_data(mob/user)
 	var/list/data = host.initial_data(program)
