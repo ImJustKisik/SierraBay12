@@ -105,8 +105,11 @@
 
 
 /obj/machinery/atm/interface_interact(mob/user)
-	interact(user)
+	ui_interact_sui(user)
 	return TRUE
+
+/obj/machinery/atm/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1)
+	return ui_interact_sui(user)
 
 /obj/machinery/atm/interact(mob/user)
 
@@ -228,199 +231,258 @@
 	else
 		return
 
+/obj/machinery/atm/proc/get_atm_ui_data()
+	var/list/data = list()
+	data["machine_id"] = machine_id
+	data["authenticated"] = !!authenticated_account
+	data["locked_down"] = ticks_left_locked_down > 0
+	data["locked_down_ticks"] = ticks_left_locked_down
+	data["timeout_ticks"] = ticks_left_timeout
+	data["emagged"] = emagged > 0
+	data["has_card"] = !!held_card
+	data["held_card_name"] = held_card ? held_card.name : "No card inserted"
+	data["view_screen"] = view_screen
+	data["account_security_level"] = account_security_level
+	data["currency"] = GLOB.using_map.local_currency_name_short
+
+	if(authenticated_account)
+		data["owner_name"] = authenticated_account.owner_name
+		data["account_number"] = authenticated_account.account_number
+		data["balance"] = authenticated_account.money
+		data["account_suspended"] = !!authenticated_account.suspended
+		data["authenticated_security_level"] = authenticated_account.security_level
+		var/list/logs = list()
+		for(var/datum/transaction/T in authenticated_account.transaction_log)
+			logs += list(list(
+				"date" = T.date,
+				"time" = T.time,
+				"target" = T.get_target_name(),
+				"purpose" = T.purpose,
+				"value" = "[GLOB.using_map.local_currency_name_short][T.amount]",
+				"source_terminal" = T.get_source_name()
+			))
+		data["transaction_logs"] = logs
+	else
+		data["owner_name"] = null
+		data["balance"] = null
+		data["account_suspended"] = FALSE
+		data["authenticated_security_level"] = null
+
+	return data
+
+/obj/machinery/atm/proc/ui_interact_sui(mob/user)
+	if(istype(user, /mob/living/silicon))
+		to_chat(user, "[icon2html(src, user)] [SPAN_WARNING("Artificial unit recognized. Artificial units do not currently receive monetary compensation, as per system banking regulation #1005.")]")
+		return
+	if(get_dist(src, user) > 1)
+		return
+
+	user.set_machine(src)
+	var/list/ui_data = get_atm_ui_data()
+	var/datum/sui/ui = SSnano.try_update_sui(user, src, "main")
+	if(!ui)
+		ui = new /datum/sui(user, src, "ATM", machine_id, 560, 720)
+		ui.set_auto_update(TRUE)
+		ui.open(ui_data)
+	else
+		ui.push_data(ui_data)
+
+/obj/machinery/atm/sui_update(mob/user, datum/sui/ui)
+	ui.push_data(get_atm_ui_data())
+
+/obj/machinery/atm/proc/perform_atm_action(mob/user, choice, list/params)
+	switch(choice)
+		if("transfer")
+			if(authenticated_account)
+				var/transfer_amount = text2num(params["funds_amount"])
+				transfer_amount = round(transfer_amount, 0.01)
+				if(transfer_amount <= 0)
+					alert("That is not a valid amount.")
+				else if(transfer_amount <= authenticated_account.money)
+					var/target_account_number = text2num(params["target_acc_number"])
+					var/transfer_purpose = params["purpose"]
+					var/datum/money_account/target_account = get_account(target_account_number)
+					if(target_account && authenticated_account.transfer(target_account, transfer_amount, transfer_purpose))
+						to_chat(user, "[icon2html(src, user)][SPAN_INFO("Funds transfer successful.")]")
+					else
+						to_chat(user, "[icon2html(src, user)][SPAN_WARNING("Funds transfer failed.")]")
+				else
+					to_chat(user, "[icon2html(src, user)][SPAN_WARNING("You don't have enough funds to do that!")]")
+			return TRUE
+		if("view_screen")
+			view_screen = text2num(params["view_screen"])
+			return TRUE
+		if("change_security_level")
+			if(authenticated_account)
+				var/new_sec_level = max(min(text2num(params["new_security_level"]), 2), 0)
+				authenticated_account.security_level = new_sec_level
+			return TRUE
+		if("attempt_auth")
+			var/obj/item/card/id/login_card
+			if(held_card)
+				login_card = held_card
+			else
+				login_card = scan_user(user)
+
+			if(!ticks_left_locked_down)
+				var/tried_account_num = text2num(params["account_num"])
+				if(!tried_account_num && login_card && (account_security_level != 2))
+					tried_account_num = login_card.associated_account_number
+				var/tried_pin = text2num(params["account_pin"])
+
+				var/datum/money_account/D
+				if(tried_account_num)
+					D = get_account(tried_account_num)
+					if(D)
+						account_security_level = D.security_level
+
+				authenticated_account = attempt_account_access(tried_account_num, tried_pin, held_card && login_card.associated_account_number == tried_account_num ? 2 : 1)
+
+				if(!authenticated_account)
+					number_incorrect_tries++
+					if(previous_account_number == tried_account_num && tried_pin)
+						if(number_incorrect_tries >= max_pin_attempts)
+							ticks_left_locked_down = 30
+							playsound(src, 'sound/machines/buzz-two.ogg', 50, 1)
+							var/datum/money_account/failed_account = get_account(tried_account_num)
+							if(failed_account)
+								failed_account.log_msg("Unauthorized login attempt", machine_id)
+						else
+							to_chat(user, "[icon2html(src, user)] [SPAN_WARNING("Incorrect pin/account combination entered, [max_pin_attempts - number_incorrect_tries] attempts remaining.")]")
+							previous_account_number = tried_account_num
+							playsound(src, 'sound/machines/buzz-sigh.ogg', 50, 1)
+					else
+						to_chat(user, "[icon2html(src, user)] [SPAN_WARNING("Unable to log in to account, additional information may be required.")]")
+						number_incorrect_tries = 0
+				else
+					playsound(src, 'sound/machines/twobeep.ogg', 50, 1)
+					ticks_left_timeout = 120
+					view_screen = NO_SCREEN
+					authenticated_account.log_msg("Remote terminal access", machine_id)
+					to_chat(user, "[icon2html(src, user)] [SPAN_INFO("Access granted. Welcome user '[authenticated_account.owner_name].'")]")
+
+				previous_account_number = tried_account_num
+			return TRUE
+		if("e_withdrawal")
+			var/ewallet_amount = max(text2num(params["funds_amount"]),0)
+			ewallet_amount = round(ewallet_amount, 0.01)
+			if(ewallet_amount <= 0)
+				alert("That is not a valid amount.")
+			else if(authenticated_account && ewallet_amount > 0)
+				if(authenticated_account.withdraw(ewallet_amount, "Credit withdrawal", machine_id))
+					playsound(src, 'sound/machines/chime.ogg', 50, 1)
+					spawn_ewallet(ewallet_amount, src.loc, user)
+				else
+					to_chat(user, "[icon2html(src, user)][SPAN_WARNING("You don't have enough funds to do that!")]")
+			return TRUE
+		if("withdrawal")
+			var/withdraw_amount = max(text2num(params["funds_amount"]),0)
+			withdraw_amount = round(withdraw_amount, 0.01)
+			if(withdraw_amount <= 0)
+				alert("That is not a valid amount.")
+			else if(authenticated_account && withdraw_amount > 0)
+				if(authenticated_account.withdraw(withdraw_amount, "Credit withdrawal", machine_id))
+					playsound(src, 'sound/machines/chime.ogg', 50, 1)
+					spawn_money(withdraw_amount, src.loc, user)
+				else
+					to_chat(user, "[icon2html(src, user)][SPAN_WARNING("You don't have enough funds to do that!")]")
+			return TRUE
+		if("balance_statement")
+			if(authenticated_account)
+				var/obj/item/paper/R = new(src.loc)
+				R.SetName("Account balance: [authenticated_account.owner_name]")
+				R.info = "<b>Automated Teller Account Statement</b><br><br>"
+				R.info += "<i>Account holder:</i> [authenticated_account.owner_name]<br>"
+				R.info += "<i>Account number:</i> [authenticated_account.account_number]<br>"
+				R.info += "<i>Balance:</i> [GLOB.using_map.local_currency_name_short][authenticated_account.money]<br>"
+				R.info += "<i>Date and time:</i> [stationtime2text()], [stationdate2text()]<br><br>"
+				R.info += "<i>Service terminal ID:</i> [machine_id]<br>"
+
+				var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
+				stampoverlay.icon_state = "paper_stamp-boss"
+				if(!R.stamped)
+					R.stamped = new
+				R.stamped += /obj/item/stamp
+				R.AddOverlays(stampoverlay)
+				R.stamps += "<HR><i>This paper has been stamped by the Automatic Teller Machine.</i>"
+
+			if(prob(50))
+				playsound(loc, 'sound/items/polaroid1.ogg', 50, 1)
+			else
+				playsound(loc, 'sound/items/polaroid2.ogg', 50, 1)
+			return TRUE
+		if("print_transaction")
+			if(authenticated_account)
+				var/obj/item/paper/R = new(src.loc)
+				R.SetName("Transaction logs: [authenticated_account.owner_name]")
+				R.info = "<b>Transaction logs</b><br>"
+				R.info += "<i>Account holder:</i> [authenticated_account.owner_name]<br>"
+				R.info += "<i>Account number:</i> [authenticated_account.account_number]<br>"
+				R.info += "<i>Date and time:</i> [stationtime2text()], [stationdate2text()]<br><br>"
+				R.info += "<i>Service terminal ID:</i> [machine_id]<br>"
+				R.info += "<table border=1 style='width:100%'>"
+				R.info += "<tr>"
+				R.info += "<td><b>Date</b></td>"
+				R.info += "<td><b>Time</b></td>"
+				R.info += "<td><b>Target</b></td>"
+				R.info += "<td><b>Purpose</b></td>"
+				R.info += "<td><b>Value</b></td>"
+				R.info += "<td><b>Source terminal ID</b></td>"
+				R.info += "</tr>"
+				for(var/datum/transaction/T in authenticated_account.transaction_log)
+					R.info += "<tr>"
+					R.info += "<td>[T.date]</td>"
+					R.info += "<td>[T.time]</td>"
+					R.info += "<td>[T.get_target_name()]</td>"
+					R.info += "<td>[T.purpose]</td>"
+					R.info += "<td>[GLOB.using_map.local_currency_name_short][T.amount]</td>"
+					R.info += "<td>[T.get_source_name()]</td>"
+					R.info += "</tr>"
+				R.info += "</table>"
+
+				var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
+				stampoverlay.icon_state = "paper_stamp-boss"
+				if(!R.stamped)
+					R.stamped = new
+				R.stamped += /obj/item/stamp
+				R.AddOverlays(stampoverlay)
+				R.stamps += "<HR><i>This paper has been stamped by the Automatic Teller Machine.</i>"
+
+			if(prob(50))
+				playsound(loc, 'sound/items/polaroid1.ogg', 50, 1)
+			else
+				playsound(loc, 'sound/items/polaroid2.ogg', 50, 1)
+			return TRUE
+		if("insert_card")
+			if(!held_card)
+				if(emagged > 0)
+					to_chat(user, "[icon2html(src, user)] [SPAN_WARNING("The ATM card reader rejected your ID because this machine has been sabotaged!")]")
+				else
+					var/obj/item/I = user.get_active_hand()
+					if(istype(I, /obj/item/card/id))
+						if(!user.unEquip(I, src))
+							return TRUE
+						held_card = I
+			else
+				release_held_id(user)
+			return TRUE
+		if("logout")
+			authenticated_account = null
+			account_security_level = 0
+			view_screen = NO_SCREEN
+			return TRUE
+	return FALSE
+
+/obj/machinery/atm/sui_act(action, list/params, datum/sui/ui)
+	if(action == "__close")
+		return FALSE
+	return perform_atm_action(ui.user, action, params)
+
 /obj/machinery/atm/Topic(href, href_list)
 	if((. = ..()))
 		return
 	if(href_list["choice"])
-		switch(href_list["choice"])
-			if("transfer")
-				if(authenticated_account)
-					var/transfer_amount = text2num(href_list["funds_amount"])
-					transfer_amount = round(transfer_amount, 0.01)
-					if(transfer_amount <= 0)
-						alert("That is not a valid amount.")
-					else if(transfer_amount <= authenticated_account.money)
-						var/target_account_number = text2num(href_list["target_acc_number"])
-						var/transfer_purpose = href_list["purpose"]
-						var/datum/money_account/target_account = get_account(target_account_number)
-						if(target_account && authenticated_account.transfer(target_account, transfer_amount, transfer_purpose))
-							to_chat(usr, "[icon2html(src, usr)][SPAN_INFO("Funds transfer successful.")]")
-						else
-							to_chat(usr, "[icon2html(src, usr)][SPAN_WARNING("Funds transfer failed.")]")
-
-					else
-						to_chat(usr, "[icon2html(src, usr)][SPAN_WARNING("You don't have enough funds to do that!")]")
-			if("view_screen")
-				view_screen = text2num(href_list["view_screen"])
-			if("change_security_level")
-				if(authenticated_account)
-					var/new_sec_level = max( min(text2num(href_list["new_security_level"]), 2), 0)
-					authenticated_account.security_level = new_sec_level
-			if("attempt_auth")
-
-				//Look to see if we're holding an ID, if so scan the data from that and use it, if not scan the user for the data
-				var/obj/item/card/id/login_card
-				if(held_card)
-					login_card = held_card
-				else
-					login_card = scan_user(usr)
-
-				if(!ticks_left_locked_down)
-					var/tried_account_num = text2num(href_list["account_num"])
-					//We WILL need an account number entered manually if security is high enough, do not automagic account number
-					if(!tried_account_num && login_card && (account_security_level != 2))
-						tried_account_num = login_card.associated_account_number
-					var/tried_pin = text2num(href_list["account_pin"])
-
-					//We'll need more information if an account's security is greater than zero so let's find out what the security setting is
-					var/datum/money_account/D
-					//Below is to avoid a runtime
-					if(tried_account_num)
-						D = get_account(tried_account_num)
-
-						if(D)
-							account_security_level = D.security_level
-
-					authenticated_account = attempt_account_access(tried_account_num, tried_pin, held_card && login_card.associated_account_number == tried_account_num ? 2 : 1)
-
-					if(!authenticated_account)
-						number_incorrect_tries++
-						//let's not count an incorrect try on someone who just needs to put in more information
-						if(previous_account_number == tried_account_num && tried_pin)
-							if(number_incorrect_tries >= max_pin_attempts)
-								//lock down the atm
-								ticks_left_locked_down = 30
-								playsound(src, 'sound/machines/buzz-two.ogg', 50, 1)
-
-								//create an entry in the account transaction log
-								var/datum/money_account/failed_account = get_account(tried_account_num)
-								if(failed_account)
-									failed_account.log_msg("Unauthorized login attempt", machine_id)
-							else
-								to_chat(usr, "[icon2html(src, usr)] [SPAN_WARNING("Incorrect pin/account combination entered, [max_pin_attempts - number_incorrect_tries] attempts remaining.")]")
-								previous_account_number = tried_account_num
-								playsound(src, 'sound/machines/buzz-sigh.ogg', 50, 1)
-						else
-							to_chat(usr, "[icon2html(src, usr)] [SPAN_WARNING("Unable to log in to account, additional information may be required.")]")
-							number_incorrect_tries = 0
-					else
-						playsound(src, 'sound/machines/twobeep.ogg', 50, 1)
-						ticks_left_timeout = 120
-						view_screen = NO_SCREEN
-
-						//create a transaction log entry
-						authenticated_account.log_msg("Remote terminal access", machine_id)
-
-						to_chat(usr, "[icon2html(src, usr)] [SPAN_INFO("Access granted. Welcome user '[authenticated_account.owner_name].'")]")
-
-					previous_account_number = tried_account_num
-			if("e_withdrawal")
-				var/amount = max(text2num(href_list["funds_amount"]),0)
-				amount = round(amount, 0.01)
-				if(amount <= 0)
-					alert("That is not a valid amount.")
-				else if(authenticated_account && amount > 0)
-					//create an entry in the account transaction log
-					if(authenticated_account.withdraw(amount, "Credit withdrawal", machine_id))
-						playsound(src, 'sound/machines/chime.ogg', 50, 1)
-						spawn_ewallet(amount,src.loc,usr)
-					else
-						to_chat(usr, "[icon2html(src, usr)][SPAN_WARNING("You don't have enough funds to do that!")]")
-			if("withdrawal")
-				var/amount = max(text2num(href_list["funds_amount"]),0)
-				amount = round(amount, 0.01)
-				if(amount <= 0)
-					alert("That is not a valid amount.")
-				else if(authenticated_account && amount > 0)
-					//remove the money
-					if(authenticated_account.withdraw(amount, "Credit withdrawal", machine_id))
-						playsound(src, 'sound/machines/chime.ogg', 50, 1)
-						spawn_money(amount,src.loc,usr)
-					else
-						to_chat(usr, "[icon2html(src, usr)][SPAN_WARNING("You don't have enough funds to do that!")]")
-			if("balance_statement")
-				if(authenticated_account)
-					var/obj/item/paper/R = new(src.loc)
-					R.SetName("Account balance: [authenticated_account.owner_name]")
-					R.info = "<b>Automated Teller Account Statement</b><br><br>"
-					R.info += "<i>Account holder:</i> [authenticated_account.owner_name]<br>"
-					R.info += "<i>Account number:</i> [authenticated_account.account_number]<br>"
-					R.info += "<i>Balance:</i> [GLOB.using_map.local_currency_name_short][authenticated_account.money]<br>"
-					R.info += "<i>Date and time:</i> [stationtime2text()], [stationdate2text()]<br><br>"
-					R.info += "<i>Service terminal ID:</i> [machine_id]<br>"
-
-					//stamp the paper
-					var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
-					stampoverlay.icon_state = "paper_stamp-boss"
-					if(!R.stamped)
-						R.stamped = new
-					R.stamped += /obj/item/stamp
-					R.AddOverlays(stampoverlay)
-					R.stamps += "<HR><i>This paper has been stamped by the Automatic Teller Machine.</i>"
-
-				if(prob(50))
-					playsound(loc, 'sound/items/polaroid1.ogg', 50, 1)
-				else
-					playsound(loc, 'sound/items/polaroid2.ogg', 50, 1)
-			if ("print_transaction")
-				if(authenticated_account)
-					var/obj/item/paper/R = new(src.loc)
-					R.SetName("Transaction logs: [authenticated_account.owner_name]")
-					R.info = "<b>Transaction logs</b><br>"
-					R.info += "<i>Account holder:</i> [authenticated_account.owner_name]<br>"
-					R.info += "<i>Account number:</i> [authenticated_account.account_number]<br>"
-					R.info += "<i>Date and time:</i> [stationtime2text()], [stationdate2text()]<br><br>"
-					R.info += "<i>Service terminal ID:</i> [machine_id]<br>"
-					R.info += "<table border=1 style='width:100%'>"
-					R.info += "<tr>"
-					R.info += "<td><b>Date</b></td>"
-					R.info += "<td><b>Time</b></td>"
-					R.info += "<td><b>Target</b></td>"
-					R.info += "<td><b>Purpose</b></td>"
-					R.info += "<td><b>Value</b></td>"
-					R.info += "<td><b>Source terminal ID</b></td>"
-					R.info += "</tr>"
-					for(var/datum/transaction/T in authenticated_account.transaction_log)
-						R.info += "<tr>"
-						R.info += "<td>[T.date]</td>"
-						R.info += "<td>[T.time]</td>"
-						R.info += "<td>[T.get_target_name()]</td>"
-						R.info += "<td>[T.purpose]</td>"
-						R.info += "<td>[GLOB.using_map.local_currency_name_short][T.amount]</td>"
-						R.info += "<td>[T.get_source_name()]</td>"
-						R.info += "</tr>"
-					R.info += "</table>"
-
-					//stamp the paper
-					var/image/stampoverlay = image('icons/obj/bureaucracy.dmi')
-					stampoverlay.icon_state = "paper_stamp-boss"
-					if(!R.stamped)
-						R.stamped = new
-					R.stamped += /obj/item/stamp
-					R.AddOverlays(stampoverlay)
-					R.stamps += "<HR><i>This paper has been stamped by the Automatic Teller Machine.</i>"
-
-				if(prob(50))
-					playsound(loc, 'sound/items/polaroid1.ogg', 50, 1)
-				else
-					playsound(loc, 'sound/items/polaroid2.ogg', 50, 1)
-
-			if("insert_card")
-				if(!held_card)
-					//this might happen if the user had the browser window open when somebody emagged it
-					if(emagged > 0)
-						to_chat(usr, "[icon2html(src, usr)] [SPAN_WARNING("The ATM card reader rejected your ID because this machine has been sabotaged!")]")
-					else
-						var/obj/item/I = usr.get_active_hand()
-						if (istype(I, /obj/item/card/id))
-							if(!usr.unEquip(I, src))
-								return
-							held_card = I
-				else
-					release_held_id(usr)
-			if("logout")
-				authenticated_account = null
-				account_security_level = 0
+		perform_atm_action(usr, href_list["choice"], href_list)
 
 	interact(usr)
 
