@@ -43,36 +43,30 @@ Used In File(s): \code\game\machinery\alarm.dm
 	<span class='bad'>Warning: Cannot obtain air sample for analysis.</span>
 {{/if}}
 <HR>
-    <table width="100%">
-        <tr>
-            <td>
-                <tr>
-                    <td>
-                        <H3>Remote Control</H3>
-                    </td>
-                    <td>
-                        <H3>Thermostat</H3>
-                    </td>
-                </tr>
-            </td>
-            <td>
-                <tr>
-                    <td>
-                        <div class="item">
-                            <div class="itemContent" style="width: 100%;">	
-                                {{:helper.link('Off',	null, { 'rcon' : 1}, data.remote_connection && !data.remote_access ? (data.rcon == 1 ? 'yellowButton' : 'disabled') : null, data.rcon == 1 ? 'selected' : null)}}
-                                {{:helper.link('Auto',	null, { 'rcon' : 2}, data.remote_connection && !data.remote_access ? (data.rcon == 2 ? 'yellowButton' : 'disabled') : null, data.rcon == 2 ? 'selected' : null)}}
-                                {{:helper.link('On',	null, { 'rcon' : 3}, data.remote_connection && !data.remote_access ? (data.rcon == 3 ? 'yellowButton' : 'disabled') : null, data.rcon == 3 ? 'selected' : null)}}
-                            </div>
-                        </div>
-                    </td>
-                    <td>
-                        {{:helper.link(data.target_temperature, null, { 'temperature' : 1})}}
-                    </td>
-                </tr>
-            </td>
-        </tr>
-    </table>
+<table width="100%" class="fixed">
+	<tr>
+		<td width="50%"><H3>Remote Control</H3></td>
+		<td width="50%"><H3>Thermostat</H3></td>
+	</tr>
+	<tr>
+		<td style="vertical-align: top;">
+			<div class="item">
+				<div class="itemContent" style="width: 100%;">
+					{{:helper.link('Off',	null, { 'rcon' : 1}, data.remote_connection && !data.remote_access ? (data.rcon == 1 ? 'yellowButton' : 'disabled') : null, data.rcon == 1 ? 'selected' : null)}}
+					{{:helper.link('Auto',	null, { 'rcon' : 2}, data.remote_connection && !data.remote_access ? (data.rcon == 2 ? 'yellowButton' : 'disabled') : null, data.rcon == 2 ? 'selected' : null)}}
+					{{:helper.link('On',	null, { 'rcon' : 3}, data.remote_connection && !data.remote_access ? (data.rcon == 3 ? 'yellowButton' : 'disabled') : null, data.rcon == 3 ? 'selected' : null)}}
+				</div>
+			</div>
+		</td>
+		<td style="vertical-align: top;">
+			<div class="item">
+				<div class="itemContent" style="width: 100%;">
+					{{:helper.link(data.target_temperature, null, { 'temperature' : 1})}}
+				</div>
+			</div>
+		</td>
+	</tr>
+</table>
 <HR>
 {{if (data.locked && !data.remote_connection) || (data.remote_connection && ! data.remote_access)}}
 	{{if data.remote_connection}}
@@ -216,7 +210,7 @@ Used In File(s): \code\game\machinery\alarm.dm
 				{{/for}}
 			</tr>			
 		{{/for}}
-		<table>
+		</table>
     {{/if}}
 {{/if}}
  
