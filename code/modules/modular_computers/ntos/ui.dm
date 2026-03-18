@@ -1,17 +1,30 @@
+/client
+	var/list/ntos_boot_sequences = list()
+
+/datum/extension/interactive/proc/sui_data(mob/user)
+	return null
+
 /// Operates NanoUI
 /datum/extension/interactive/ntos/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1)
 	if(!on || !host_status())
 		if(ui)
 			ui.close()
+		var/datum/sui/closed_sui = SSnano.try_update_sui(user, src, ui_key)
+		if(closed_sui)
+			closed_sui.close()
 		return 0
 
 	for (var/datum/computer_file/program/extra_program in running_program_windows)
 		extra_program.ui_interact(user, ui_key, null, force_open)
 
+	var/datum/sui/main_menu_sui = SSnano.try_update_sui(user, src, ui_key)
+
 	// If we have an active program switch to it now.
 	if(active_program)
 		if(ui) // This is the main laptop screen. Since we are switching to program's UI close it for now.
 			ui.close()
+		if(main_menu_sui)
+			main_menu_sui.close()
 		active_program.ui_interact(user, ui_key, null, force_open)
 		return
 
@@ -22,6 +35,11 @@
 		show_error(user, "DISK ERROR")
 		return // No HDD, Something is very broken.
 
+	if(ui)
+		ui.close()
+	ui_interact_sui(user, ui_key, force_open)
+
+/datum/extension/interactive/ntos/proc/build_main_menu_data()
 	var/list/data = get_header_data()
 
 	var/datum/computer_file/data/autorun = get_file("autorun")
@@ -32,31 +50,186 @@
 		program["desc"] = P.filedesc
 		program["icon"] = P.program_menu_icon
 		program["autorun"] = (istype(autorun) && (autorun.stored_data == P.filename)) ? 1 : 0
-		if(P in running_programs)
-			program["running"] = 1
-		if (P in running_program_windows)
-			program["extra_window"] = 1
+		program["running"] = (P in running_programs) ? TRUE : FALSE
+		program["extra_window"] = (P in running_program_windows) ? TRUE : FALSE
 		programs.Add(list(program))
 
 	data["programs"] = programs
-
 	data["updating"] = updating
 	data["update_progress"] = update_progress
 	data["updates"] = updates
 	data["allow_multiple_windows"] = allow_multiple_windows
-//[SIERRA-ADD]
-	var/obj/item/modular_computer/c = holder
-	if(istype(c))
-		if(c.in_camera_mode)
-			data["in_camera_mode"] = 1
-//[/SIERRA-ADD]
-	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
-	if (!ui)
-		ui = new(user, src, ui_key, "laptop_mainscreen.tmpl", "NTOS Main Menu ", 400, 500)
-		ui.auto_update_layout = 1
-		ui.set_initial_data(data)
-		ui.open()
-		ui.set_auto_update(1)
+
+	var/obj/item/modular_computer/computer_holder = holder
+	if(istype(computer_holder))
+		data["in_camera_mode"] = computer_holder.in_camera_mode ? TRUE : FALSE
+
+	return data
+
+/datum/extension/interactive/ntos/proc/should_show_ntos_boot(client/C)
+	if(!istype(C))
+		return FALSE
+	if(!islist(C.ntos_boot_sequences))
+		C.ntos_boot_sequences = list()
+	return !C.ntos_boot_sequences["NTOSMainMenu"]
+
+/datum/extension/interactive/ntos/proc/get_ntos_preload_logical_ids(singleton/asset_registry_v2/asset_registry_v2)
+	var/list/logical_ids = list()
+	if(!asset_registry_v2)
+		return logical_ids
+
+	var/list/icon_asset_names = list(
+		"uiIcons16.png",
+		"uiIcons16Green.png",
+		"uiIcons16Red.png"
+	)
+	for(var/asset_name in icon_asset_names)
+		var/icon_logical_id = asset_registry_v2.register_legacy_named_asset(asset_name, file("nano/images/[asset_name]"))
+		if(icon_logical_id && !(icon_logical_id in logical_ids))
+			logical_ids += icon_logical_id
+
+	for(var/datum/computer_file/program/P in get_all_files())
+		if(!istype(P))
+			continue
+		var/module_path = initial(P.nanomodule_path)
+		if(!module_path)
+			continue
+		var/interface_name = initial(module_path:sui_interface_name)
+		if(!length(interface_name))
+			continue
+		var/interface_asset_id = asset_registry_v2.ensure_sui_interface_registered(interface_name)
+		if(interface_asset_id && !(interface_asset_id in logical_ids))
+			logical_ids += interface_asset_id
+
+	return logical_ids
+
+/datum/extension/interactive/ntos/proc/ui_interact_sui(mob/user, ui_key = "main", force_open = 1, datum/topic_state/state = GLOB.default_state)
+	ui_key = ui_key || "main"
+
+	var/datum/sui/ui = SSnano.try_update_sui(user, src, ui_key)
+	if(ui && force_open)
+		ui.close()
+		ui = null
+
+	if(!ui)
+		ui = new /datum/sui(user, src, "NTOSMainMenu", "NTOS Main Menu", 400, 500, nstate = state, nui_key = ui_key)
+		ui.set_auto_update(TRUE)
+		ui.open(src.sui_data(user))
+	else
+		ui.push_data(src.sui_data(user))
+
+/datum/extension/interactive/ntos/sui_data(mob/user)
+	return build_main_menu_data()
+
+/datum/extension/interactive/ntos/sui_update(mob/user, datum/sui/ui)
+	ui.push_data(src.sui_data(user))
+
+/datum/extension/interactive/ntos/sui_verify_assets(datum/sui/ui, client/C)
+	if(!istype(ui) || ui.interface != "NTOSMainMenu" || !istype(C))
+		return TRUE
+
+	var/singleton/asset_registry_v2/asset_registry_v2 = GET_SINGLETON(/singleton/asset_registry_v2)
+	if(!should_show_ntos_boot(C))
+		return TRUE
+
+	asset_registry_v2.ensure_pack_verified(C, ASSET_PACK_NANOUI_COMMON)
+	if(!C.asset_v2_packs[ASSET_PACK_NANOUI_COMMON])
+		return FALSE
+
+	var/list/logical_ids = get_ntos_preload_logical_ids(asset_registry_v2)
+	for(var/logical_id in logical_ids)
+		asset_registry_v2.ensure_asset_verified(C, logical_id)
+		var/datum/asset_entry_v2/entry = asset_registry_v2.assets_by_logical_id[logical_id]
+		if(istype(entry) && !C.asset_v2_sent_keys[entry.key])
+			return FALSE
+
+	return TRUE
+
+/datum/extension/interactive/ntos/sui_get_head_html(datum/sui/ui, singleton/asset_registry_v2/asset_registry_v2)
+	if(!istype(ui) || ui.interface != "NTOSMainMenu")
+		return null
+
+	var/client/C = ui?.user?.client
+	if(!should_show_ntos_boot(C))
+		return null
+
+	var/list/preload_urls = list()
+	var/list/logical_ids = get_ntos_preload_logical_ids(asset_registry_v2)
+	for(var/logical_id in logical_ids)
+		var/url = asset_registry_v2.resolve_key(logical_id)
+		if(length(url))
+			preload_urls += url
+
+	if(istype(C))
+		C.ntos_boot_sequences["NTOSMainMenu"] = TRUE
+
+	var/list/boot_messages = list(
+		"POST complete. Mounting NTOS system image...",
+		"Enumerating installed program manifests...",
+		"Loading interface modules into memory...",
+		"Synchronizing icon atlases and status glyphs...",
+		"Verifying local terminal control surface..."
+	)
+	var/boot_messages_json = json_encode(boot_messages)
+	var/preload_urls_json = json_encode(preload_urls)
+
+	return {"<script type='text/javascript'>
+		window.suiBootConfig = {
+			enabled: true,
+			minDuration: 1350,
+			completeMessage: 'NTOS boot complete. Handing control to MAIN MENU.',
+			messages: [boot_messages_json],
+			preloadUrls: [preload_urls_json]
+		};
+	</script>"}
+
+/datum/extension/interactive/ntos/sui_act(action, list/params, datum/sui/ui)
+	var/mob/user = ui ? ui.user : null
+	switch(action)
+		if("kill_program")
+			var/datum/computer_file/program/program_to_kill = get_file(params["program"])
+			if(!istype(program_to_kill) || program_to_kill.program_state == PROGRAM_STATE_KILLED)
+				return FALSE
+			kill_program_remote(program_to_kill, FALSE, user)
+			to_chat(user, SPAN_NOTICE("Program [program_to_kill.filename].[program_to_kill.filetype] with PID [rand(100,999)] has been killed."))
+			return TRUE
+		if("run_program")
+			var/datum/computer_file/program/program_to_run = run_program(params["program"], user)
+			if(!istype(program_to_run))
+				return FALSE
+			if(ui)
+				ui.close()
+			program_to_run.ui_interact(user)
+			return TRUE
+		if("run_program_new_window")
+			var/datum/computer_file/program/program_to_open = get_file(params["program"])
+			if(!istype(program_to_open))
+				return FALSE
+			if(program_to_open.program_state == PROGRAM_STATE_ACTIVE && (program_to_open in running_program_windows))
+				minimize_program(program_to_open, user)
+				return TRUE
+			program_to_open = run_program_new_window(params["program"], user)
+			if(!istype(program_to_open))
+				return FALSE
+			program_to_open.ui_interact(user)
+			return TRUE
+		if("toggle_autorun")
+			var/datum/computer_file/data/autorun = get_file("autorun")
+			if(istype(autorun) && autorun.stored_data == params["program"])
+				set_autorun()
+			else
+				set_autorun(params["program"])
+			return TRUE
+		if("shutdown")
+			system_shutdown()
+			return TRUE
+		if("terminal")
+			open_terminal(user)
+			return FALSE
+		if("camera")
+			camera()
+			return FALSE
+	return FALSE
 
 /datum/extension/interactive/ntos/extension_status(mob/user)
 	. = ..()
@@ -243,7 +416,7 @@
 			"icon" = P.ui_header
 		)))
 	data["PC_programheaders"] = program_headers
-	data["PC_activeprogram"] = program?.filename
+	data["PC_activeprogram"] = program ? program.filename : null
 
 	data["PC_stationtime"] = stationtime2text()
 	data["PC_hasheader"] = !updating
