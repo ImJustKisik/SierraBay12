@@ -19,6 +19,9 @@
 /datum/nano_module/program/deck_management
 	name = "Deck Management Program"
 	available_to_ai = TRUE
+	sui_interface_name = "DeckManagement"
+	sui_width = 700
+	sui_height = 800
 	var/prog_state = DECK_HOME                       //Which menu we are in.
 	var/can_view_only = 0                            //Whether we are in view-only mode for the report viewer.
 	var/datum/shuttle/selected_shuttle               //Which shuttle is currently selected, if any.
@@ -41,7 +44,7 @@
 		my_log.unregister(src)
 	. = ..()
 
-/datum/nano_module/program/deck_management/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, state = GLOB.default_state)
+/datum/nano_module/program/deck_management/proc/build_deck_management_data(mob/user)
 	var/list/data = host.initial_data(program)
 	var/logs = SSshuttle.shuttle_logs
 
@@ -120,6 +123,154 @@
 			data["shuttle_name"] = selected_shuttle.name
 			data["mission_data"] = generate_mission_data(selected_mission)
 			data["view_only"] = can_view_only
+	return data
+
+/datum/nano_module/program/deck_management/proc/handle_deck_action(action, list/params, mob/user)
+	params = params || list()
+	if(!get_default_access(user))
+		return TOPIC_HANDLED
+	if(text2num(params["warning"]))
+		if(alert(user, "Are you sure you want to do this? Data may be lost.",, "Yes.", "No.") == "No.")
+			return TOPIC_HANDLED
+
+	switch(action)
+		if("details")
+			if(set_shuttle(user, params["shuttle"], 0) && set_mission(text2num(params["mission"])))
+				prog_state = DECK_MISSION_DETAILS
+			return TOPIC_HANDLED
+		if("history")
+			if(set_shuttle(user, params["shuttle"], 0))
+				selected_mission = null
+				prog_state = DECK_ALL_MISSIONS
+			return TOPIC_HANDLED
+		if("new_mission")
+			if(!set_shuttle(user, params["shuttle"], 1))
+				return TOPIC_HANDLED
+			var/datum/shuttle_log/my_log = SSshuttle.shuttle_logs[selected_shuttle]
+			var/input = input(user, "Mission Name:", "Mission Creation") as null|text
+			selected_mission = my_log.create_mission(sanitize(input, 50))
+			prog_state = DECK_MISSION_DETAILS
+			return TOPIC_HANDLED
+		if("modify")
+			if(set_shuttle(user, params["shuttle"], 1) && set_mission(text2num(params["mission"])))
+				var/datum/shuttle_log/my_log = SSshuttle.shuttle_logs[selected_shuttle]
+				switch(params["modify"])
+					if("rename")
+						var/input = input(user, "Mission Name:", "Rename Mission") as null|text
+						my_log.rename_mission(selected_mission, sanitize(input, 50))
+					if("delete")
+						my_log.delete_mission(selected_mission)
+					if("move_up")
+						my_log.move_in_queue(selected_mission, 1)
+					if("move_down")
+						my_log.move_in_queue(selected_mission, -1)
+			return TOPIC_HANDLED
+		if("report")
+			if(set_shuttle(user, params["shuttle"], 0) && set_mission(text2num(params["mission"])))
+				can_view_only = text2num(params["view"]) ? 1 : 0
+				if(text2num(params["flight_plan"]))
+					prog_state = DECK_REPORT_EDIT
+					if(selected_mission.flight_plan)
+						selected_report = selected_mission.flight_plan.clone()
+					else
+						selected_report = new /datum/computer_file/report/flight_plan
+						selected_report.set_access(null, selected_shuttle.logging_access, override = 0)
+				else
+					if(selected_mission.stage in list(SHUTTLE_MISSION_PLANNED, SHUTTLE_MISSION_QUEUED))
+						return TOPIC_HANDLED
+					var/index = text2num(params["index"])
+					if(!index)
+						return TOPIC_HANDLED
+					var/datum/computer_file/report/prototype = LAZYACCESS(report_prototypes, index)
+					if (!prototype)
+						return TOPIC_HANDLED
+					prog_state = DECK_REPORT_EDIT
+					var/datum/computer_file/report/old_report = locate(prototype.type) in selected_mission.other_reports
+					if(old_report)
+						selected_report = old_report.clone()
+					else
+						var/datum/computer_file/report/recipient/shuttle/new_report = prototype.clone()
+						new_report.shuttle.set_value(selected_shuttle.name)
+						new_report.mission.set_value(selected_mission.name)
+						selected_report = new_report
+			return TOPIC_HANDLED
+		if("home")
+			selected_shuttle = null
+			selected_mission = null
+			selected_report = null
+			prog_state = DECK_HOME
+			return TOPIC_HANDLED
+		if("edit")
+			if(!ensure_valid_mission() || !selected_report)
+				return TOPIC_HANDLED
+			var/field_ID = text2num(params["ID"])
+			var/datum/report_field/field = selected_report.field_from_ID(field_ID)
+			if(!field || !field.verify_access_edit(get_access(user)))
+				return TOPIC_HANDLED
+			field.ask_value(user)
+			return TOPIC_HANDLED
+		if("submit")
+			if(!ensure_valid_mission() || !selected_report)
+				return TOPIC_HANDLED
+			if(!selected_report.verify_access_edit(get_access(user)))
+				return TOPIC_HANDLED
+			var/datum/shuttle_log/my_submit_log = SSshuttle.shuttle_logs[selected_shuttle]
+			if(my_submit_log.submit_report(selected_mission, selected_report, user))
+				selected_report = null
+				prog_state = DECK_MISSION_DETAILS
+			return TOPIC_HANDLED
+		if("discard")
+			if(!ensure_valid_mission() || !selected_report)
+				return TOPIC_HANDLED
+			qdel(selected_report)
+			prog_state = DECK_MISSION_DETAILS
+			return TOPIC_HANDLED
+		if("summon_crew")
+			if(!set_shuttle(user, params["shuttle"], 1) || !set_mission(text2num(params["mission"])))
+				return TOPIC_HANDLED
+			if(!selected_mission.flight_plan)
+				return TOPIC_HANDLED
+			var/crew = selected_mission.flight_plan.manifest.get_value(in_line = 1)
+			var/time = selected_mission.flight_plan.planned_depart.get_value()
+			if(!crew || !time)
+				to_chat(user, SPAN_WARNING("Please fill in the crew manifest and departure time first."))
+				return TOPIC_HANDLED
+			var/place = selected_shuttle.name
+			if(alert(user, "Would you like to choose a custom gathering point, or just use [place]?", "Announcement Creation", "Default", "Custom") == "Custom")
+				var/list/areas = area_repository.get_areas_by_name()
+				var/area/A = input(user, "Pick a custom location from the list.", "Announcement Creation") as null|anything in areas
+				if(A)
+					place = A
+			if(alert(user, "This will make a radio announcement summoning all mission crew to the [place]. Are you sure you want to do this?",, "Yes.", "No.") == "No.")
+				return TOPIC_HANDLED
+			var/datum/shuttle_log/my_log = SSshuttle.shuttle_logs[selected_shuttle]
+			if(world.time - my_log.last_spam >= 1 MINUTE)
+				GLOB.global_announcer.autosay("The [selected_shuttle.name] is planning to depart on a mission promptly at [time]. The following crew members are to make their way to \the [place] immediately: [crew].", "Hangar Announcement System")
+				my_log.last_spam = world.time
+			else
+				to_chat(user, SPAN_WARNING("It's too soon after the previous announcement!"))
+			return TOPIC_HANDLED
+		if("email_crew")
+			if(!set_shuttle(user, params["shuttle"], 1) || !set_mission(text2num(params["mission"])))
+				return TOPIC_HANDLED
+			if(!selected_mission.flight_plan)
+				return TOPIC_HANDLED
+			var/datum/report_field/people/manifest = selected_mission.flight_plan.manifest
+			if(!manifest.get_value())
+				return TOPIC_HANDLED
+			manifest.send_email(user)
+			return TOPIC_HANDLED
+	return TOPIC_NOACTION
+
+/datum/nano_module/program/deck_management/sui_data(mob/user)
+	return build_deck_management_data(user)
+
+/datum/nano_module/program/deck_management/sui_act(action, list/params, datum/sui/ui)
+	var/mob/user = ui ? ui.user : null
+	return handle_deck_action(action, params, user) != TOPIC_NOACTION
+
+/datum/nano_module/program/deck_management/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, state = GLOB.default_state)
+	var/list/data = build_deck_management_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
@@ -211,154 +362,28 @@
 	var/mob/user = usr
 	if(..())
 		return 1
-
-	if(!get_default_access(user))
-		return 1 //No program access if you don't have the right access.
-	if(text2num(href_list["warning"])) //Gives the user a chance to avoid losing unsaved reports.
-		if(alert(user, "Are you sure you want to do this? Data may be lost.",, "Yes.", "No.") == "No.")
-			return 1 //If yes, proceed to the actual action instead.
-
 	if(href_list["details"])
-		var/shuttle_name = href_list["shuttle"]
-		var/mission_ID = text2num(href_list["mission"])
-		if(set_shuttle(user, shuttle_name, 0) && set_mission(mission_ID))
-			prog_state = DECK_MISSION_DETAILS
-		return 1
+		return handle_deck_action("details", list("shuttle" = href_list["shuttle"], "mission" = href_list["mission"]), user)
 	if(href_list["history"])
-		var/shuttle_name = href_list["history"]
-		if(set_shuttle(user, shuttle_name, 0))
-			selected_mission = null
-			prog_state = DECK_ALL_MISSIONS
-		return 1
+		return handle_deck_action("history", list("shuttle" = href_list["history"]), user)
 	if(href_list["new_mission"])
-		var/shuttle_name = href_list["new_mission"]
-		if(!set_shuttle(user, shuttle_name, 1))
-			return 1
-		var/datum/shuttle_log/my_log = SSshuttle.shuttle_logs[selected_shuttle]
-		var/input = input(user, "Mission Name:", "Mission Creation") as null|text
-		selected_mission = my_log.create_mission(sanitize(input, 50))
-		prog_state = DECK_MISSION_DETAILS
-		return 1
+		return handle_deck_action("new_mission", list("shuttle" = href_list["new_mission"]), user)
 	if(href_list["modify"])
-		var/shuttle_name = href_list["shuttle"]
-		var/mission_ID = text2num(href_list["mission"])
-		var/function = href_list["modify"]
-		if(set_shuttle(user, shuttle_name, 1) && set_mission(mission_ID))
-			var/datum/shuttle_log/my_log = SSshuttle.shuttle_logs[selected_shuttle]
-			switch(function)
-				if("rename")
-					var/input = input(user, "Mission Name:", "Rename Mission") as null|text
-					my_log.rename_mission(selected_mission, sanitize(input, 50))
-				if("delete")
-					my_log.delete_mission(selected_mission)
-				if("move_up")
-					my_log.move_in_queue(selected_mission, 1)
-				if("move_down")
-					my_log.move_in_queue(selected_mission, -1)
-		return 1
+		return handle_deck_action("modify", list("modify" = href_list["modify"], "shuttle" = href_list["shuttle"], "mission" = href_list["mission"], "warning" = href_list["warning"]), user)
 	if(href_list["report"])
-		var/shuttle_name = href_list["shuttle"]
-		var/mission_ID = text2num(href_list["mission"])
-		if(set_shuttle(user, shuttle_name, 0) && set_mission(mission_ID))
-			can_view_only = (href_list["view"] ? 1 : 0)
-			if(href_list["flight_plan"])
-				prog_state = DECK_REPORT_EDIT
-				if(selected_mission.flight_plan)
-					selected_report = selected_mission.flight_plan.clone()//We always make a new one to buffer changes until submitted.
-				else
-					selected_report = new /datum/computer_file/report/flight_plan
-					selected_report.set_access(null, selected_shuttle.logging_access, override = 0)
-			else
-				if(selected_mission.stage in list(SHUTTLE_MISSION_PLANNED, SHUTTLE_MISSION_QUEUED))
-					return 1 //Hold your horses until the mission is started on these reports.
-				var/index = text2num(href_list["index"])
-				if(!index)
-					return 1
-				var/datum/computer_file/report/prototype = LAZYACCESS(report_prototypes, index)
-				if (!prototype)
-					return 1
-				prog_state = DECK_REPORT_EDIT
-				var/datum/computer_file/report/old_report = locate(prototype.type) in selected_mission.other_reports
-				if(old_report)
-					selected_report = old_report.clone()
-				else
-					var/datum/computer_file/report/recipient/shuttle/new_report = prototype.clone()
-					new_report.shuttle.set_value(selected_shuttle.name)
-					new_report.mission.set_value(selected_mission.name)
-					selected_report = new_report
-		return 1
+		return handle_deck_action("report", list("shuttle" = href_list["shuttle"], "mission" = href_list["mission"], "view" = href_list["view"], "flight_plan" = href_list["flight_plan"], "index" = href_list["index"]), user)
 	if(href_list["home"])
-		selected_shuttle = null
-		selected_mission = null
-		selected_report = null
-		prog_state = DECK_HOME
-		return 1
-
+		return handle_deck_action("home", list("warning" = href_list["warning"]), user)
 	if(href_list["edit"])
-		if(!ensure_valid_mission() || !selected_report)
-			return 1
-		var/field_ID = text2num(href_list["ID"])
-		var/datum/report_field/field = selected_report.field_from_ID(field_ID)
-		if(!field || !field.verify_access_edit(get_access(user)))
-			return 1
-		field.ask_value(user) //Handles the remaining IO.
-		return 1
+		return handle_deck_action("edit", list("ID" = href_list["ID"]), user)
 	if(href_list["submit"])
-		if(!ensure_valid_mission() || !selected_report)
-			return 1
-		if(!selected_report.verify_access_edit(get_access(user)))
-			return 1
-		var/datum/shuttle_log/my_log = SSshuttle.shuttle_logs[selected_shuttle]
-		if(my_log.submit_report(selected_mission, selected_report, user))
-			selected_report = null
-			prog_state = DECK_MISSION_DETAILS
-		return 1
+		return handle_deck_action("submit", null, user)
 	if(href_list["discard"])
-		if(!ensure_valid_mission() || !selected_report)
-			return 1
-		qdel(selected_report)
-		prog_state = DECK_MISSION_DETAILS
-		return 1
-
+		return handle_deck_action("discard", list("warning" = href_list["warning"]), user)
 	if(href_list["summon_crew"])
-		var/shuttle_name = href_list["shuttle"]
-		var/mission_ID = text2num(href_list["mission"])
-		if(!set_shuttle(user, shuttle_name, 1) || !set_mission(mission_ID))
-			return 1
-		if(!selected_mission.flight_plan)
-			return 1
-		var/crew = selected_mission.flight_plan.manifest.get_value(in_line = 1)
-		var/time = selected_mission.flight_plan.planned_depart.get_value()
-		if(!crew || !time)
-			to_chat(user, SPAN_WARNING("Please fill in the crew manifest and departure time first."))
-			return 1
-		var/place = selected_shuttle.name
-		if(alert(user, "Would you like to choose a custom gathering point, or just use [place]?", "Announcement Creation", "Default", "Custom") == "Custom")
-			var/list/areas = area_repository.get_areas_by_name()
-			var/area/A = input(user, "Pick a custom location from the list.", "Announcement Creation") as null|anything in areas
-			if(A)
-				place = A
-		if(alert(user, "This will make a radio announcement summoning all mission crew to the [place]. Are you sure you want to do this?",, "Yes.", "No.") == "No.")
-			return 1
-		var/datum/shuttle_log/my_log = SSshuttle.shuttle_logs[selected_shuttle]
-		if(world.time - my_log.last_spam >= 1 MINUTE) //Slow down with that spam button
-			GLOB.global_announcer.autosay("The [selected_shuttle.name] is planning to depart on a mission promptly at [time]. The following crew members are to make their way to \the [place] immediately: [crew].", "Hangar Announcement System")
-			my_log.last_spam = world.time
-		else
-			to_chat(user, SPAN_WARNING("It's too soon after the previous announcement!"))
-		return 1
+		return handle_deck_action("summon_crew", list("shuttle" = href_list["shuttle"], "mission" = href_list["mission"]), user)
 	if(href_list["email_crew"])
-		var/shuttle_name = href_list["shuttle"]
-		var/mission_ID = text2num(href_list["mission"])
-		if(!set_shuttle(user, shuttle_name, 1) || !set_mission(mission_ID))
-			return 1
-		if(!selected_mission.flight_plan)
-			return 1
-		var/datum/report_field/people/manifest = selected_mission.flight_plan.manifest
-		if(!manifest.get_value())
-			return 1
-		manifest.send_email(user)
-		return 1
+		return handle_deck_action("email_crew", list("shuttle" = href_list["shuttle"], "mission" = href_list["mission"]), user)
 
 #undef DECK_HOME
 #undef DECK_ALL_MISSIONS
