@@ -16,6 +16,9 @@
 
 /datum/nano_module/program/reports
 	name = "Report Editor"
+	sui_interface_name = "Reports"
+	sui_width = 700
+	sui_height = 800
 
 	/// Whether we are in view-only mode.
 	var/can_view_only = FALSE
@@ -25,7 +28,7 @@
 	var/datum/computer_file/report/saved_report
 	var/prog_state = REPORTS_VIEW
 
-/datum/nano_module/program/reports/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, state = GLOB.default_state)
+/datum/nano_module/program/reports/proc/build_reports_data(mob/user)
 	var/list/data = host.initial_data(program)
 	data["prog_state"] = prog_state
 	switch(prog_state)
@@ -42,6 +45,100 @@
 				M["uid"] = report.uid
 				L += list(M)
 			data["reports"] = L
+	return data
+
+/datum/nano_module/program/reports/proc/confirm_unsaved_changes(mob/user)
+	if(!selected_report || can_view_only || !istype(user))
+		return TRUE
+	return alert(user, "Are you sure you want to leave this page? Unsubmitted data will be lost.",, "Yes.", "No.") == "Yes."
+
+/datum/nano_module/program/reports/proc/handle_reports_action(action, list/params, mob/user)
+	params = params || list()
+	switch(action)
+		if("load")
+			if((selected_report || saved_report) && !confirm_unsaved_changes(user))
+				return TOPIC_HANDLED
+			if(selected_report || saved_report)
+				close_report()
+			load_report(user)
+			return TOPIC_HANDLED
+		if("save")
+			if(!selected_report || !selected_report.verify_access(get_access(user)))
+				return TOPIC_HANDLED
+			save_report(user, text2num(params["save_as"]))
+			return TOPIC_HANDLED
+		if("submit")
+			if(!selected_report || !selected_report.verify_access_edit(get_access(user)))
+				return TOPIC_HANDLED
+			if(selected_report.submit(user))
+				to_chat(user, "The [src] has been submitted.")
+				if(alert(user, "Would you like to save a copy?","Save Report", "Yes.", "No.") == "Yes.")
+					save_report(user)
+			return TOPIC_HANDLED
+		if("discard")
+			if(!selected_report)
+				return TOPIC_HANDLED
+			if(!can_view_only && !confirm_unsaved_changes(user))
+				return TOPIC_HANDLED
+			close_report()
+			return TOPIC_HANDLED
+		if("edit")
+			if(!selected_report)
+				return TOPIC_HANDLED
+			var/field_ID = text2num(params["ID"])
+			var/datum/report_field/field = selected_report.field_from_ID(field_ID)
+			if(!field || !field.verify_access_edit(get_access(user)))
+				return TOPIC_HANDLED
+			field.ask_value(user)
+			return TOPIC_HANDLED
+		if("print")
+			if(!selected_report || !selected_report.verify_access(get_access(user)))
+				return TOPIC_HANDLED
+			var/with_fields = text2num(params["print_mode"])
+			var/text = selected_report.generate_pencode(get_access(user), with_fields)
+			if(!program.computer.print_paper(text, selected_report.display_name()))
+				to_chat(user, "Hardware error: Printer was unable to print the file. It may be out of paper.")
+			return TOPIC_HANDLED
+		if("export")
+			if(!selected_report || !selected_report.verify_access(get_access(user)))
+				return TOPIC_HANDLED
+			selected_report.rename_file()
+			var/datum/computer_file/data/text/file = new
+			file.filename = selected_report.filename
+			file.stored_data = selected_report.generate_pencode(get_access(user), no_html = TRUE)
+			if(!program.computer.create_file(file))
+				to_chat(user, "Error storing file. Please check your hard drive.")
+			else
+				to_chat(user, "The report has been exported as [file.filename].[file.filetype]")
+			return TOPIC_HANDLED
+		if("download")
+			if(!confirm_unsaved_changes(user))
+				return TOPIC_HANDLED
+			switch_state(REPORTS_DOWNLOAD)
+			return TOPIC_HANDLED
+		if("get_report")
+			var/uid = text2num(params["report"])
+			for(var/datum/computer_file/report/report in ntnet_global.fetch_reports(get_access(user)))
+				if(report.uid == uid)
+					selected_report = report.clone()
+					can_view_only = FALSE
+					switch_state(REPORTS_VIEW)
+					return TOPIC_HANDLED
+			to_chat(user, "Network error: Selected report could not be downloaded. Check network functionality and credentials.")
+			return TOPIC_HANDLED
+		if("home")
+			switch_state(REPORTS_VIEW)
+			return TOPIC_HANDLED
+	return TOPIC_NOACTION
+
+/datum/nano_module/program/reports/sui_data(mob/user)
+	return build_reports_data(user)
+
+/datum/nano_module/program/reports/sui_act(action, list/params, datum/sui/ui)
+	return handle_reports_action(action, params, ui?.user) != TOPIC_NOACTION
+
+/datum/nano_module/program/reports/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, state = GLOB.default_state)
+	var/list/data = build_reports_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
@@ -108,93 +205,26 @@
 /datum/nano_module/program/reports/Topic(href, href_list)
 	if(..())
 		return TOPIC_HANDLED
-	var/mob/user = usr
-
-	if(text2num(href_list["warning"])) //Gives the user a chance to avoid losing unsaved reports.
-		if(alert(user, "Are you sure you want to leave this page? Unsubmitted data will be lost.",, "Yes.", "No.") == "No.")
-			return TOPIC_HANDLED //If yes, proceed to the actual action instead.
-
 	if(href_list["load"])
-		if(selected_report || saved_report)
-			close_report()
-		load_report(user)
-		return TOPIC_HANDLED
+		return handle_reports_action("load", null, usr)
 	if(href_list["save"])
-		. = TOPIC_HANDLED
-		if(!selected_report)
-			return
-		if(!selected_report.verify_access(get_access(user)))
-			return
-		var/save_as = text2num(href_list["save_as"])
-		save_report(user, save_as)
-		return
+		return handle_reports_action("save", list("save_as" = href_list["save_as"]), usr)
 	if(href_list["submit"])
-		. = TOPIC_HANDLED
-		if(!selected_report)
-			return
-		if(!selected_report.verify_access_edit(get_access(user)))
-			return
-		if(selected_report.submit(user))
-			to_chat(user, "The [src] has been submitted.")
-			if(alert(user, "Would you like to save a copy?","Save Report", "Yes.", "No.") == "Yes.")
-				save_report(user)
-		return
+		return handle_reports_action("submit", null, usr)
 	if(href_list["discard"])
-		. = TOPIC_HANDLED
-		if(!selected_report)
-			return
-		close_report()
-		return
+		return handle_reports_action("discard", null, usr)
 	if(href_list["edit"])
-		. = TOPIC_HANDLED
-		if(!selected_report)
-			return
-		var/field_ID = text2num(href_list["ID"])
-		var/datum/report_field/field = selected_report.field_from_ID(field_ID)
-		if(!field || !field.verify_access_edit(get_access(user)))
-			return
-		field.ask_value(user) //Handles the remaining IO.
-		return
+		return handle_reports_action("edit", list("ID" = href_list["ID"]), usr)
 	if(href_list["print"])
-		. = TOPIC_HANDLED
-		if(!selected_report || !selected_report.verify_access(get_access(user)))
-			return
-		var/with_fields = text2num(href_list["print_mode"])
-		var/text = selected_report.generate_pencode(get_access(user), with_fields)
-		if(!program.computer.print_paper(text, selected_report.display_name()))
-			to_chat(user, "Hardware error: Printer was unable to print the file. It may be out of paper.")
-		return
+		return handle_reports_action("print", list("print_mode" = href_list["print_mode"]), usr)
 	if(href_list["export"])
-		. = TOPIC_HANDLED
-		if(!selected_report || !selected_report.verify_access(get_access(user)))
-			return
-		selected_report.rename_file()
-		var/datum/computer_file/data/text/file = new
-		file.filename = selected_report.filename
-		file.stored_data = selected_report.generate_pencode(get_access(user), no_html = TRUE) //TXT files can't have html; they use pencode only.
-		if(!program.computer.create_file(file))
-			to_chat(user, "Error storing file. Please check your hard drive.")
-		else
-			to_chat(user, "The report has been exported as [file.filename].[file.filetype]")
-		return
-
+		return handle_reports_action("export", null, usr)
 	if(href_list["download"])
-		switch_state(REPORTS_DOWNLOAD)
-		return TOPIC_HANDLED
+		return handle_reports_action("download", null, usr)
 	if(href_list["get_report"])
-		. = TOPIC_HANDLED
-		var/uid = text2num(href_list["report"])
-		for(var/datum/computer_file/report/report in ntnet_global.fetch_reports(get_access(user)))
-			if(report.uid == uid)
-				selected_report = report.clone()
-				can_view_only = FALSE
-				switch_state(REPORTS_VIEW)
-				return
-		to_chat(user, "Network error: Selected report could not be downloaded. Check network functionality and credentials.")
-		return
+		return handle_reports_action("get_report", list("report" = href_list["report"]), usr)
 	if(href_list["home"])
-		switch_state(REPORTS_VIEW)
-		return TOPIC_HANDLED
+		return handle_reports_action("home", null, usr)
 
 #undef REPORTS_VIEW
 #undef REPORTS_DOWNLOAD
