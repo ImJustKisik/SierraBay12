@@ -19,6 +19,29 @@
 	sui_width = 575
 	sui_height = 700
 	available_to_ai = TRUE
+	var/list/pending_wireless_shutdown = list()
+
+/datum/nano_module/program/computer_ntnetmonitor/proc/get_confirm_key(mob/user)
+	if(!user)
+		return null
+	return user.ckey || "\ref[user]"
+
+/datum/nano_module/program/computer_ntnetmonitor/proc/is_wireless_shutdown_pending(mob/user)
+	var/key = get_confirm_key(user)
+	if(!key || !islist(pending_wireless_shutdown))
+		return FALSE
+	return !!pending_wireless_shutdown[key]
+
+/datum/nano_module/program/computer_ntnetmonitor/proc/set_wireless_shutdown_pending(mob/user, pending)
+	var/key = get_confirm_key(user)
+	if(!key)
+		return
+	if(!islist(pending_wireless_shutdown))
+		pending_wireless_shutdown = list()
+	if(pending)
+		pending_wireless_shutdown[key] = TRUE
+	else
+		pending_wireless_shutdown -= key
 
 /datum/nano_module/program/computer_ntnetmonitor/proc/build_ntnetmonitor_data(mob/user)
 	if(!ntnet_global)
@@ -45,6 +68,7 @@
 	data["ntnetmaxlogs"] = ntnet_global.setting_maxlogcount
 
 	data["banned_nids"] = list(ntnet_global.banned_nids)
+	data["confirm_wireless_shutdown"] = is_wireless_shutdown_pending(user)
 
 	return data
 
@@ -68,11 +92,20 @@
 		if(!ntnet_global)
 			return TRUE
 		if(ntnet_global.setting_disabled)
+			set_wireless_shutdown_pending(user, FALSE)
 			ntnet_global.setting_disabled = FALSE
 			return TRUE
-		var/response = alert(user, "Really disable NTNet wireless? If your computer is connected wirelessly you won't be able to turn it back on! This will affect all connected wireless devices.", "NTNet shutdown", "Yes", "No")
-		if(response == "Yes" && (!state || CanInteract(user, state)))
+		set_wireless_shutdown_pending(user, TRUE)
+		return TRUE
+	if(action == "confirmToggleWireless")
+		if(!ntnet_global)
+			return TRUE
+		set_wireless_shutdown_pending(user, FALSE)
+		if(!state || CanInteract(user, state))
 			ntnet_global.setting_disabled = TRUE
+		return TRUE
+	if(action == "cancelToggleWireless")
+		set_wireless_shutdown_pending(user, FALSE)
 		return TRUE
 	if(action == "purgelogs")
 		if(ntnet_global)
