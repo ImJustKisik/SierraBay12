@@ -328,6 +328,7 @@
 	if (currently_vending)
 		data["product"] = currently_vending.item_name
 		data["price"] = currently_vending.price
+		data["image"] = get_product_icon_b64(currently_vending.item_path)
 
 	var/list/listed_products = list()
 	for (var/key = 1 to length(product_records))
@@ -339,6 +340,7 @@
 			"name" = product.item_name,
 			"price" = product.price,
 			"color" = product.display_color,
+			"category" = product.category,
 			"amount" = product.get_amount(),
 			"icon" = get_product_icon_b64(product.item_path)
 		)))
@@ -375,13 +377,35 @@
 		return
 	user.set_machine(src)
 
+	var/list/ui_data = get_vending_ui_data()
+	var/product_count = length(ui_data["products"])
+	var/window_width = 520
+	var/window_height = 680
+
+	if (ui_data["panel"])
+		window_width = 420
+		window_height = 260
+	else if (ui_data["mode"])
+		window_width = 560
+		window_height = 700
+	else
+		if (product_count >= 18)
+			window_width = 680
+			window_height = 760
+		else if (product_count <= 8)
+			window_width = 520
+			window_height = 640
+		else
+			window_width = 620
+			window_height = 720
+
 	var/datum/sui/ui = SSnano.try_update_sui(user, src, "main")
 	if(!ui)
-		ui = new /datum/sui(user, src, "VendingMachine", name, 456, 640)
-		ui.set_frameless(TRUE)
-		ui.open(get_vending_ui_data())
+		ui = new /datum/sui(user, src, "VendingMachine", name, window_width, window_height)
+		ui.set_window_options("focus=0;can_close=1;can_minimize=1;can_maximize=1;can_resize=0;titlebar=0;border=0;")
+		ui.open(ui_data)
 	else
-		ui.push_data(get_vending_ui_data())
+		ui.push_data(ui_data)
 
 
 /obj/machinery/vending/OnTopic(mob/user, href_list, datum/topic_state/state)
