@@ -15,6 +15,9 @@
 /datum/nano_module/program/email_administration
 	name = "Email Administration"
 	available_to_ai = TRUE
+	sui_interface_name = "EmailAdministration"
+	sui_width = 600
+	sui_height = 450
 	var/datum/computer_file/data/email_account/current_account = null
 	var/datum/computer_file/data/email_message/current_message = null
 	var/error = ""
@@ -26,10 +29,9 @@
 		return
 	return os
 
-/datum/nano_module/program/email_administration/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/email_administration/proc/build_email_admin_data(mob/user)
 	var/list/data = host.initial_data(program)
 
-	data += "skill_fail"
 	if(!user.skill_check(SKILL_COMPUTER, SKILL_BASIC))
 		var/datum/extension/fake_data/fake_data = get_or_create_extension(src, /datum/extension/fake_data, 15)
 		data["skill_fail"] = fake_data.update_and_return_data()
@@ -68,6 +70,98 @@
 			)))
 		data["accounts"] = all_accounts
 		data["accountcount"] = length(all_accounts)
+	return data
+
+/datum/nano_module/program/email_administration/proc/handle_email_admin_action(action, list/params, mob/user)
+	params = params || list()
+	if(!istype(user))
+		return TOPIC_HANDLED
+
+	if(action == "back")
+		if(error)
+			error = ""
+		else if(current_message)
+			current_message = null
+		else
+			current_account = null
+		return TOPIC_HANDLED
+
+	if(!user.skill_check(SKILL_COMPUTER, SKILL_BASIC))
+		return TOPIC_HANDLED
+
+	if(action == "terminal")
+		var/datum/extension/interactive/ntos/os_terminal = get_ntos()
+		if(os_terminal)
+			os_terminal.open_terminal(user)
+		return TOPIC_HANDLED
+
+	var/datum/extension/interactive/ntos/os = get_ntos()
+	if(!os)
+		return TOPIC_HANDLED
+
+	var/obj/item/card/id/I = user.GetIdCard()
+	if(!istype(I) || !(access_network_admin in I.access))
+		return TOPIC_HANDLED
+
+	switch(action)
+		if("ban")
+			if(!current_account)
+				return TOPIC_HANDLED
+			current_account.suspended = !current_account.suspended
+			os.add_log("EMAIL LOG: SA-EDIT Account [current_account.login] has been [current_account.suspended ? "" : "un" ]suspended by SA [I.registered_name] ([I.assignment]).")
+			error = "Account [current_account.login] has been [current_account.suspended ? "" : "un" ]suspended."
+			return TOPIC_HANDLED
+		if("changepass")
+			if(!current_account)
+				return TOPIC_HANDLED
+			var/newpass = sanitize(input(user,"Enter new password for account [current_account.login]", "Password"), 100)
+			if(!newpass)
+				return TOPIC_HANDLED
+			current_account.password = newpass
+			os.add_log("EMAIL LOG: SA-EDIT Password for account [current_account.login] has been changed by SA [I.registered_name] ([I.assignment]).")
+			return TOPIC_HANDLED
+		if("viewmail")
+			if(!current_account)
+				return TOPIC_HANDLED
+			for(var/datum/computer_file/data/email_message/received_message in (current_account.inbox | current_account.outbox| current_account.spam | current_account.deleted))
+				if(received_message.uid == text2num(params["id"]))
+					current_message = received_message
+					break
+			return TOPIC_HANDLED
+		if("viewaccount")
+			for(var/datum/computer_file/data/email_account/email_account in ntnet_global.email_accounts)
+				if(email_account.uid == text2num(params["id"]))
+					current_account = email_account
+					break
+			return TOPIC_HANDLED
+		if("newaccount")
+			var/newdomain = sanitize(input(user,"Pick domain:", "Domain name") as null|anything in GLOB.using_map.usable_email_tlds)
+			if(!newdomain)
+				return TOPIC_HANDLED
+			var/newlogin = sanitize(input(user,"Pick account name (@[newdomain]):", "Account name"), 100)
+			if(!newlogin)
+				return TOPIC_HANDLED
+
+			var/complete_login = "[newlogin]@[newdomain]"
+			if(ntnet_global.find_email_by_name(complete_login))
+				error = "Error creating account: An account with same address already exists."
+				return TOPIC_HANDLED
+
+			var/datum/computer_file/data/email_account/new_account = new /datum/computer_file/data/email_account()
+			new_account.login = complete_login
+			new_account.password = GenerateKey()
+			error = "Email [new_account.login] has been created, with generated password [new_account.password]"
+			return TOPIC_HANDLED
+	return TOPIC_NOACTION
+
+/datum/nano_module/program/email_administration/sui_data(mob/user)
+	return build_email_admin_data(user)
+
+/datum/nano_module/program/email_administration/sui_act(action, list/params, datum/sui/ui)
+	return handle_email_admin_action(action, params, ui?.user) != TOPIC_NOACTION
+
+/datum/nano_module/program/email_administration/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_email_admin_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
@@ -83,83 +177,20 @@
 	if(..())
 		return TOPIC_HANDLED
 
-	var/mob/user = usr
-	if(!istype(user))
-		return TOPIC_HANDLED
-
-	if(!user.skill_check(SKILL_COMPUTER, SKILL_BASIC))
-		return TOPIC_HANDLED
-
-	var/datum/extension/interactive/ntos/os = get_ntos()
-	if(!os)
-		return TOPIC_HANDLED
-
-	// High security - can only be operated when the user has an ID with access on them.
-	var/obj/item/card/id/I = user.GetIdCard()
-	if(!istype(I) || !(access_network_admin in I.access))
-		return TOPIC_HANDLED
-
 	if(href_list["back"])
-		if(error)
-			error = ""
-		else if(current_message)
-			current_message = null
-		else
-			current_account = null
-		return TOPIC_HANDLED
+		return handle_email_admin_action("back", null, usr)
 
 	if(href_list["ban"])
-		if(!current_account)
-			return TOPIC_HANDLED
-
-		current_account.suspended = !current_account.suspended
-		os.add_log("EMAIL LOG: SA-EDIT Account [current_account.login] has been [current_account.suspended ? "" : "un" ]suspended by SA [I.registered_name] ([I.assignment]).")
-		error = "Account [current_account.login] has been [current_account.suspended ? "" : "un" ]suspended."
-		return TOPIC_HANDLED
+		return handle_email_admin_action("ban", null, usr)
 
 	if(href_list["changepass"])
-		if(!current_account)
-			return TOPIC_HANDLED
-
-		var/newpass = sanitize(input(user,"Enter new password for account [current_account.login]", "Password"), 100)
-		if(!newpass)
-			return TOPIC_HANDLED
-		current_account.password = newpass
-		os.add_log("EMAIL LOG: SA-EDIT Password for account [current_account.login] has been changed by SA [I.registered_name] ([I.assignment]).")
-		return TOPIC_HANDLED
+		return handle_email_admin_action("changepass", null, usr)
 
 	if(href_list["viewmail"])
-		if(!current_account)
-			return TOPIC_HANDLED
-
-		for(var/datum/computer_file/data/email_message/received_message in (current_account.inbox | current_account.outbox| current_account.spam | current_account.deleted))
-			if(received_message.uid == text2num(href_list["viewmail"]))
-				current_message = received_message
-				break
-		return TOPIC_HANDLED
+		return handle_email_admin_action("viewmail", list("id" = href_list["viewmail"]), usr)
 
 	if(href_list["viewaccount"])
-		for(var/datum/computer_file/data/email_account/email_account in ntnet_global.email_accounts)
-			if(email_account.uid == text2num(href_list["viewaccount"]))
-				current_account = email_account
-				break
-		return TOPIC_HANDLED
+		return handle_email_admin_action("viewaccount", list("id" = href_list["viewaccount"]), usr)
 
 	if(href_list["newaccount"])
-		var/newdomain = sanitize(input(user,"Pick domain:", "Domain name") as null|anything in GLOB.using_map.usable_email_tlds)
-		if(!newdomain)
-			return TOPIC_HANDLED
-		var/newlogin = sanitize(input(user,"Pick account name (@[newdomain]):", "Account name"), 100)
-		if(!newlogin)
-			return TOPIC_HANDLED
-
-		var/complete_login = "[newlogin]@[newdomain]"
-		if(ntnet_global.find_email_by_name(complete_login))
-			error = "Error creating account: An account with same address already exists."
-			return TOPIC_HANDLED
-
-		var/datum/computer_file/data/email_account/new_account = new/datum/computer_file/data/email_account()
-		new_account.login = complete_login
-		new_account.password = GenerateKey()
-		error = "Email [new_account.login] has been created, with generated password [new_account.password]"
-		return TOPIC_HANDLED
+		return handle_email_admin_action("newaccount", null, usr)
