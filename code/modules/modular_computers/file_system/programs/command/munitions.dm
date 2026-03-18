@@ -20,6 +20,9 @@
 
 /datum/nano_module/program/munitions
 	name = "Munitions Control Program"
+	sui_interface_name = "Munitions"
+	sui_width = 500
+	sui_height = 600
 	var/access_req = list(access_bridge)
 	var/list/monitored_munitions = list()
 	var/obj/overmap/visitable/linked = null
@@ -40,15 +43,16 @@
 
 /datum/nano_module/program/munitions/proc/update_panel()
 	SSnano.update_uis(src)
+	SSnano.update_sui_uis(src)
 
 /datum/nano_module/program/munitions/proc/collect_munitions()
 	var/list/output = list()
 	for (var/obj/machinery/payload_interface/interface in SSmachines.machinery)
-		if (linked?.check_ownership(interface))
+		if (linked && linked.check_ownership(interface))
 			output += interface
 	return output
 
-/datum/nano_module/program/munitions/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/munitions/proc/build_munitions_data(mob/user)
 	var/list/data = host.initial_data(program)
 	var/authenticated = check_access(user, access_req)
 
@@ -68,7 +72,7 @@
 				"has_payload" = !isnull(payload),
 				"payload_data" = payload ? payload.name : null,
 				"loading" = interface.loading,
-				"arming" = payload?.armed,
+				"arming" = payload ? payload.armed : null,
 				"firing" = interface.firing
 			))
 		else
@@ -79,6 +83,45 @@
 				"payload_data" = payload ? payload.name : null,
 				"loading" = interface.loading
 			))
+	return data
+
+/datum/nano_module/program/munitions/proc/handle_munitions_action(action, list/params, mob/user)
+	params = params || list()
+	if(!check_access(user, access_req))
+		return TOPIC_NOACTION
+
+	var/obj/machinery/payload_interface/interface = locate(params["target"])
+	if (!istype(interface) || !linked || !linked.check_ownership(interface))
+		return TOPIC_NOACTION
+
+	switch(action)
+		if ("load")
+			interface.load()
+		if ("arm")
+			if (interface.can_arm())
+				interface.arm(user)
+		if ("fire")
+			if (interface.can_arm())
+				interface.fire(user)
+		if ("configure")
+			if (!interface.arming)
+				var/obj/structure/missile/missile = interface.get_payload()
+				var/datum/computer_file/program/munitions/munitions_program = program
+				if (istype(missile) && istype(munitions_program))
+					munitions_program.configure(user, missile)
+		else
+			return TOPIC_NOACTION
+	return TOPIC_HANDLED
+
+/datum/nano_module/program/munitions/sui_data(mob/user)
+	return build_munitions_data(user)
+
+/datum/nano_module/program/munitions/sui_act(action, list/params, datum/sui/ui)
+	var/mob/user = ui ? ui.user : null
+	return handle_munitions_action(action, params, user) != TOPIC_NOACTION
+
+/datum/nano_module/program/munitions/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_munitions_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
@@ -107,27 +150,10 @@
 	var/mob/user = usr
 	var/datum/nano_module/program/munitions/module = NM
 
-	if (!module?.check_access(user, module.access_req))
-		return TOPIC_NOACTION
-
-	var/obj/machinery/payload_interface/interface = locate(href_list["target"])
-	if (!istype(interface) || !module.linked?.check_ownership(interface))
-		return TOPIC_NOACTION
-
-	switch(href_list["action"])
-		if ("load")
-			if (interface)
-				interface.load()
-		if ("arm")
-			if (interface && interface.can_arm())
-				interface.arm(user)
-		if ("fire")
-			if (interface && interface.can_arm())
-				interface.fire(user)
-		if ("configure")
-			if (interface && !interface.arming)
-				var/obj/structure/missile/missile = interface.get_payload()
-				if (istype(missile))
-					configure(user, missile)
-	SSnano.update_uis(NM)
-	return TOPIC_HANDLED
+	var/result = TOPIC_NOACTION
+	if(module)
+		result = module.handle_munitions_action(href_list["action"], list("target" = href_list["target"]), user)
+	if(result != TOPIC_NOACTION)
+		SSnano.update_uis(NM)
+		return result
+	return TOPIC_NOACTION
