@@ -4,7 +4,8 @@
 
 <div id='uiTitleWrapper' unselectable="on">
     <div id='uiStatusIcon' class='icon24 uiStatusGood' unselectable="on"></div>
-    <div id='uiTitleText' unselectable="on">{{:config.title}}</div>
+    <div id='uiTitleText' unselectable="on">{{:config.title || config.srcObject.name}}</div>
+    <div id='uiTitleFluff' unselectable="on"></div>
 </div>
 
 {{if data.PC_hasheader}}
