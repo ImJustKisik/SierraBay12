@@ -15,116 +15,151 @@
 	var/error
 	usage_flags = PROGRAM_ALL
 	category = PROG_UTIL
-/*
+/datum/computer_file/program/filemanager/proc/get_portable_drive()
+	if(!computer)
+		return null
+	if(computer.get_component(PART_DRIVE))
+		return computer.get_component(PART_DRIVE)
+	if(istype(computer.holder, /obj/machinery/computer/modular))
+		var/obj/machinery/computer/modular/modular_machine = computer.holder
+		return modular_machine.portable_drive
+	return null
+
+/datum/computer_file/program/filemanager/proc/handle_filemanager_action(action, list/params, mob/user)
+	params = params || list()
+	switch(action)
+		if("open_file")
+			open_file = params["filename"]
+			error = null
+			return TOPIC_HANDLED
+		if("new_text_file")
+			if(!istype(user))
+				return TOPIC_NOACTION
+			var/newname = sanitize(input(user, "Enter file name or leave blank to cancel:", "File rename"))
+			if(!newname)
+				return TOPIC_HANDLED
+			if(!computer.create_data_file(newname, file_type = /datum/computer_file/data/text))
+				error = "File error: Unable to create file on disk."
+			return TOPIC_HANDLED
+		if("delete_file")
+			computer.delete_file(params["filename"])
+			if(open_file == params["filename"])
+				open_file = null
+			return TOPIC_HANDLED
+		if("clone_file")
+			computer.clone_file(params["filename"])
+			return TOPIC_HANDLED
+		if("rename_file")
+			if(!istype(user))
+				return TOPIC_NOACTION
+			var/filename = params["filename"]
+			var/newname = sanitize(input(user, "Enter new file name:", "File rename", filename))
+			if(!newname)
+				return TOPIC_HANDLED
+			if(!computer.rename_file(filename, newname))
+				error = "File error: Unable to rename file."
+			else if(open_file == filename)
+				open_file = newname
+			return TOPIC_HANDLED
+		if("usb_delete_file")
+			var/obj/item/stock_parts/computer/hard_drive/portable/drive = get_portable_drive()
+			if(drive)
+				computer.delete_file(params["filename"], drive)
+			return TOPIC_HANDLED
+		if("copy_to_usb")
+			var/obj/item/stock_parts/computer/hard_drive/portable/drive = get_portable_drive()
+			if(drive)
+				computer.copy_between_disks(params["filename"], computer.get_component(PART_HDD), drive)
+			return TOPIC_HANDLED
+		if("copy_from_usb")
+			var/obj/item/stock_parts/computer/hard_drive/portable/drive = get_portable_drive()
+			if(drive)
+				computer.copy_between_disks(params["filename"], drive, computer.get_component(PART_HDD))
+			return TOPIC_HANDLED
+		if("close_file")
+			open_file = null
+			error = null
+			return TOPIC_HANDLED
+		if("edit")
+			if(!open_file)
+				return TOPIC_HANDLED
+			var/datum/computer_file/data/F = computer.get_file(open_file)
+			if(!istype(F))
+				return TOPIC_HANDLED
+			if(F.do_not_edit && istype(user) && (alert(user, "WARNING: This file is not compatible with editor. Editing it may result in permanently corrupted formatting or damaged data consistency. Edit anyway?", "Incompatible File", "No", "Yes") == "No"))
+				return TOPIC_HANDLED
+			if(F.read_only)
+				error = "This file is read only. You cannot edit it."
+				return TOPIC_HANDLED
+
+			var/oldtext = html_decode(F.stored_data)
+			oldtext = replacetext(oldtext, "\[br\]", "\n")
+
+			var/newtext = sanitize(replacetext(input(user, "Editing file [open_file]. You may use most tags used in paper formatting:", "Text Editor", oldtext) as message|null, "\n", "\[br\]"), MAX_TEXTFILE_LENGTH)
+			if(!newtext)
+				return TOPIC_HANDLED
+
+			computer.update_data_file(F.filename, newtext, F.type, replace_content = TRUE)
+			return TOPIC_HANDLED
+		if("print_file")
+			if(!open_file)
+				return TOPIC_HANDLED
+			var/datum/computer_file/data/F = computer.get_file(open_file)
+			var/datum/computer_file/binary/photo/P = computer.get_file(open_file)
+			var/datum/computer_file/data/bodyscan/B = computer.get_file(open_file)
+			if(istype(B))
+				if(!computer.print_bodyscan())
+					error = "Hardware error: Unable to print the file."
+				else
+					var/obj/item/paper/bodyscan/paper = new /obj/item/paper/bodyscan(user.loc, "Printout error.", "Body scan report - [B.filename]", B.generate_print_data())
+					paper.metadata = B.stored_data
+				return TOPIC_HANDLED
+			if(istype(F))
+				if(!computer.print_paper(F.generate_file_data(), F.filename, F.papertype, F.metadata))
+					error = "Hardware error: Unable to print the file."
+			if(istype(P))
+				if(!computer.print_photo(P.photo, P.filename))
+					error = "Hardware error: Unable to print the photo."
+			return TOPIC_HANDLED
+	return TOPIC_NOACTION
+
 /datum/computer_file/program/filemanager/Topic(href, href_list)
 	if(..())
 		return TOPIC_HANDLED
 
 	if(href_list["PRG_openfile"])
-		. = TOPIC_HANDLED
-		open_file = href_list["PRG_openfile"]
+		return handle_filemanager_action("open_file", list("filename" = href_list["PRG_openfile"]), usr)
 	if(href_list["PRG_newtextfile"])
-		. = TOPIC_HANDLED
-		var/newname = sanitize(input(usr, "Enter file name or leave blank to cancel:", "File rename"))
-		if(!newname)
-			return
-		if(!computer.create_data_file(newname, file_type = /datum/computer_file/data/text))
-			error = "File error: Unable to create file on disk."
-			return
+		return handle_filemanager_action("new_text_file", null, usr)
 	if(href_list["PRG_deletefile"])
-		. = TOPIC_HANDLED
-		computer.delete_file(href_list["PRG_deletefile"])
+		return handle_filemanager_action("delete_file", list("filename" = href_list["PRG_deletefile"]), usr)
 	if(href_list["PRG_clone"])
-		. = TOPIC_HANDLED
-		computer.clone_file(href_list["PRG_clone"])
+		return handle_filemanager_action("clone_file", list("filename" = href_list["PRG_clone"]), usr)
 	if(href_list["PRG_rename"])
-		. = TOPIC_HANDLED
-		var/newname = sanitize(input(usr, "Enter new file name:", "File rename", href_list["PRG_rename"]))
-		if(!newname)
-			return
-		if(!computer.rename_file(href_list["PRG_rename"], newname))
-			error = "File error: Unable to rename file."
-			return
+		return handle_filemanager_action("rename_file", list("filename" = href_list["PRG_rename"]), usr)
 	if(href_list["PRG_usbdeletefile"])
-		. = TOPIC_HANDLED
-		if(istype(computer.holder, /obj/machinery/computer/modular))
-			var/obj/machinery/computer/modular/modular_machine = computer.holder
-			computer.delete_file(href_list["PRG_usbdeletefile"], modular_machine.portable_drive)
-		else
-			computer.delete_file(href_list["PRG_usbdeletefile"], computer.get_component(PART_DRIVE))
+		return handle_filemanager_action("usb_delete_file", list("filename" = href_list["PRG_usbdeletefile"]), usr)
 	if(href_list["PRG_copytousb"])
-		. = TOPIC_HANDLED
-		if(istype(computer.holder, /obj/machinery/computer/modular))
-			var/obj/machinery/computer/modular/modular_machine = computer.holder
-			computer.copy_between_disks(href_list["PRG_copytousb"], computer.get_component(PART_HDD), modular_machine.portable_drive)
-		else
-			computer.copy_between_disks(href_list["PRG_copytousb"], computer.get_component(PART_HDD), computer.get_component(PART_DRIVE))
+		return handle_filemanager_action("copy_to_usb", list("filename" = href_list["PRG_copytousb"]), usr)
 	if(href_list["PRG_copyfromusb"])
-		. = TOPIC_HANDLED
-		if(istype(computer.holder, /obj/machinery/computer/modular))
-			var/obj/machinery/computer/modular/modular_machine = computer.holder
-			computer.copy_between_disks(href_list["PRG_copyfromusb"], modular_machine.portable_drive, computer.get_component(PART_HDD))
-		else
-			computer.copy_between_disks(href_list["PRG_copyfromusb"], computer.get_component(PART_DRIVE), computer.get_component(PART_HDD))
+		return handle_filemanager_action("copy_from_usb", list("filename" = href_list["PRG_copyfromusb"]), usr)
 	if(href_list["PRG_closefile"])
-		. = TOPIC_HANDLED
-		open_file = null
-		error = null
+		return handle_filemanager_action("close_file", null, usr)
 	if(href_list["PRG_edit"])
-		. = TOPIC_HANDLED
-		if(!open_file)
-			return
-		var/datum/computer_file/data/F = computer.get_file(open_file)
-		if(!istype(F))
-			return
-		if(F.do_not_edit && (alert("WARNING: This file is not compatible with editor. Editing it may result in permanently corrupted formatting or damaged data consistency. Edit anyway?", "Incompatible File", "No", "Yes") == "No"))
-			return
-		if(F.read_only)
-			error = "This file is read only. You cannot edit it."
-			return
-
-		var/oldtext = html_decode(F.stored_data)
-		oldtext = replacetext(oldtext, "\[br\]", "\n")
-
-		var/newtext = sanitize(replacetext(input(usr, "Editing file [open_file]. You may use most tags used in paper formatting:", "Text Editor", oldtext) as message|null, "\n", "\[br\]"), MAX_TEXTFILE_LENGTH)
-		if(!newtext)
-			return
-
-		computer.update_data_file(F.filename, newtext, F.type, replace_content = TRUE)
+		return handle_filemanager_action("edit", null, usr)
 	if(href_list["PRG_printfile"])
-		. = TOPIC_HANDLED
-		if(!open_file)
-			return
-		var/datum/computer_file/data/F = computer.get_file(open_file)
-//[SIERRA-EDIT]
-		var/datum/computer_file/binary/photo/P = computer.get_file(open_file)
-		var/datum/computer_file/data/bodyscan/B = computer.get_file(open_file)
-		if(istype(B))
-			if(!computer.print_bodyscan())
-				error = "Hardware error: Unable to print the file."
-				return
-			else
-				var/obj/item/paper/bodyscan/paper =	new /obj/item/paper/bodyscan(usr.loc, "Printout error.", "Body scan report - [B.filename]", B.generate_print_data())
-				paper.metadata = B.stored_data
-		else if(istype(F))
-			if(!computer.print_paper(F.generate_file_data(),F.filename,F.papertype, F.metadata))
-				error = "Hardware error: Unable to print the file."
-				return
-		if(istype(P))
-			if(!computer.print_photo(P.photo, P.filename))
-				error = "Hardware error: Unable to print the photo."
-				return
-//[/SIERRA-EDIT]
-	if(.)
-		SSnano.update_uis(NM)
-*/
+		return handle_filemanager_action("print_file", null, usr)
 /datum/nano_module/program/computer_filemanager
 	name = "NTOS File Manager"
+	sui_interface_name = "FileManager"
+	sui_width = 600
+	sui_height = 700
 
-/datum/nano_module/program/computer_filemanager/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+/datum/nano_module/program/computer_filemanager/proc/build_filemanager_data(mob/user)
 	var/list/data = host.initial_data(program)
-	var/datum/computer_file/program/filemanager/PRG
-	PRG = program
+	var/datum/computer_file/program/filemanager/PRG = program
+	if(!istype(PRG))
+		return data
 
 	if(PRG.error)
 		data["error"] = PRG.error
@@ -178,6 +213,19 @@
 						"undeletable" = F.undeletable
 					)))
 				data["usbfiles"] = usbfiles
+	return data
+
+/datum/nano_module/program/computer_filemanager/sui_data(mob/user)
+	return build_filemanager_data(user)
+
+/datum/nano_module/program/computer_filemanager/sui_act(action, list/params, datum/sui/ui)
+	var/datum/computer_file/program/filemanager/PRG = program
+	if(!istype(PRG))
+		return FALSE
+	return PRG.handle_filemanager_action(action, params || list(), ui?.user) != TOPIC_NOACTION
+
+/datum/nano_module/program/computer_filemanager/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 1, datum/topic_state/state = GLOB.default_state)
+	var/list/data = build_filemanager_data(user)
 
 	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
 	if (!ui)
