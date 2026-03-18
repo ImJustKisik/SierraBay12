@@ -385,6 +385,7 @@ Usage in DM:
 	// SUI framework
 	head_content += "<script type='text/javascript' defer src='{{asset:sui.js.core}}'></script> "
 	head_content += "<script type='text/javascript' defer src='{{asset:sui.js.components}}'></script> "
+	head_content += "<script type='text/javascript' defer src='{{asset:sui.js.ntos_common}}'></script> "
 
 	// Interface-specific script
 	if(interface_asset_id)

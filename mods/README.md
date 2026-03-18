@@ -314,6 +314,13 @@ mods/hello_world
 
 То есть для файла `nano/templates/mods/jukebox.tmpl` при открытии интерфейса нужно использовать название `"mods-jukebox.tmpl"` вместо обычного `"jukebox.tmpl"`.
 
+## SUI
+Новые интерфейсы Sierra UI необходимо создавать в `mods/sui/js`, а не в `nano/js`.
+
+Для SUI сохраняется текущий контракт имён: интерфейс `"CameraMonitor"` должен жить в файле `sui_cameramonitor.js`, а внутри регистрироваться через `SUI.registerInterface("CameraMonitor", ...)`.
+
+Общие SUI-ассеты (`sui.js`, `sui_components.js`, `sui_ntos_common.js` и SUI-зависимые Preact-библиотеки) также принадлежат `mods/sui`.
+
 ## Исключительные случаи
 Из каждого правила есть исключения, обусловленные многими обстоятельствами. Не задумывайся об этом сильно.
 

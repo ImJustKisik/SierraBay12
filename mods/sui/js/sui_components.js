@@ -13,6 +13,71 @@
     var h = SUI.h
     var useEffect = SUI.useEffect
     var useRef = SUI.useRef
+    var useState = SUI.useState
+    var NTOS_COMPAT_THEME = {
+        pageBackground: '#151b23',
+        panelBackground: '#1b1b1c',
+        cardBackground: '#10161d',
+        panelBorder: '#374151',
+        rowBorder: '#243142',
+        rowHover: '#1f2937',
+        text: '#f8fafc',
+        muted: '#94a3b8',
+        subtle: '#7c8a9d',
+        title: '#93c5fd',
+        primary: '#2563eb',
+        primaryHover: '#1d4ed8',
+        primaryText: '#f8fbff',
+        good: '#4ade80',
+        warn: '#fbbf24',
+        bad: '#f87171'
+    }
+
+    function getNtosCompatTheme() {
+        return SUI.NTOS && SUI.NTOS.theme ? SUI.NTOS.theme : NTOS_COMPAT_THEME
+    }
+
+    function isNtosCompatMode() {
+        var state = typeof SUI !== 'undefined' && SUI.getState ? SUI.getState() : null
+        var data = state && state.data
+        return !!(data && data.PC_hasheader && typeof data.PC_showexitprogram !== 'undefined')
+    }
+
+    function mergeStyles(baseStyle, overrideStyle) {
+        var merged = {}
+        var key
+        for (key in (baseStyle || {})) merged[key] = baseStyle[key]
+        for (key in (overrideStyle || {})) merged[key] = overrideStyle[key]
+        return merged
+    }
+
+    function ensureNtosCompatStyles() {
+        if (!isNtosCompatMode()) {
+            return
+        }
+        if (SUI.NTOS && SUI.NTOS.ensureStyles) {
+            SUI.NTOS.ensureStyles()
+        }
+        if (typeof document === 'undefined' || document.getElementById('sui-ntos-compat-styles')) {
+            return
+        }
+
+        var theme = getNtosCompatTheme()
+        var style = document.createElement('style')
+        style.id = 'sui-ntos-compat-styles'
+        style.type = 'text/css'
+        style.appendChild(document.createTextNode(''
+            + '.suiNtosCompatButton:hover{background:' + theme.primaryHover + ' !important;}'
+            + '.suiNtosCompatButtonGhost:hover,.suiNtosCompatActionLink:hover{border-color:#475569 !important;background:rgba(51,65,85,0.22) !important;color:#ffffff !important;}'
+            + '.suiNtosCompatButtonDanger:hover{border-color:#b91c1c !important;background:rgba(127,29,29,0.32) !important;color:#fecaca !important;}'
+            + '.suiNtosCompatTable td{padding:8px 6px;color:' + theme.text + ';vertical-align:top;}'
+            + '.suiNtosCompatTable tr + tr td{border-top:1px solid ' + theme.rowBorder + ';}'
+            + '.suiNtosCompatTable tr:first-child td{border-top:none;color:' + theme.muted + ';text-transform:uppercase;font-size:10px;letter-spacing:0.12em;font-weight:600;}'
+            + '.suiNtosCompatTableRow:hover td{background:' + theme.rowHover + ';}'
+            + '.suiNtosCompatActionLink .uiIcon16,.suiNtosCompatButton .uiIcon16,.suiNtosCompatButtonGhost .uiIcon16{margin:0;}'
+        ))
+        document.getElementsByTagName('head')[0].appendChild(style)
+    }
 
     // ============================================================
     // Button
@@ -24,6 +89,7 @@
         var disabled = props.disabled
         var onClick = props.onClick
         var fluid = props.fluid
+        var isNtos = isNtosCompatMode()
 
         var iconHtml = ''
         var iconClass = 'noIcon'
@@ -40,6 +106,50 @@
         }
         if (props.style) {
             for (var styleKey in props.style) style[styleKey] = props.style[styleKey]
+        }
+
+        if (isNtos) {
+            ensureNtosCompatStyles()
+            var theme = getNtosCompatTheme()
+            var isDanger = (props.className || '').indexOf('linkDanger') !== -1 || (props.class || '').indexOf('linkDanger') !== -1
+            var ntosGhost = !!selected || !!props.ghost || isDanger
+            var ntosStyle = {
+                display: fluid ? 'flex' : 'inline-flex',
+                width: fluid ? '100%' : 'auto',
+                boxSizing: 'border-box',
+                alignItems: 'center',
+                justifyContent: fluid ? 'flex-start' : 'center',
+                gap: '6px',
+                minHeight: '28px',
+                padding: fluid ? '0 12px' : '0 10px',
+                borderRadius: '2px',
+                border: ntosGhost ? '1px solid ' + (isDanger ? '#7f1d1d' : theme.panelBorder) : 'none',
+                background: ntosGhost ? (selected ? 'rgba(30,58,138,0.22)' : 'transparent') : theme.primary,
+                color: disabled ? '#67788b' : (isDanger ? '#fca5a5' : (ntosGhost ? theme.muted : theme.primaryText)),
+                cursor: disabled ? 'default' : 'pointer',
+                opacity: disabled ? '0.45' : '1',
+                whiteSpace: fluid ? 'normal' : 'nowrap',
+                textAlign: fluid ? 'left' : 'center',
+                fontSize: '10px',
+                fontWeight: '700',
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+            }
+
+            return h('button', {
+                type: 'button',
+                disabled: !!disabled,
+                class: 'suiNtosCompatButton' + (ntosGhost ? ' suiNtosCompatButtonGhost' : '') + (isDanger ? ' suiNtosCompatButtonDanger' : ''),
+                onClick: function (e) {
+                    e.preventDefault()
+                    if (!disabled && onClick) onClick(e)
+                },
+                style: mergeStyles(ntosStyle, style)
+            },
+                icon ? h('span', { class: 'uiIcon16 icon-' + icon, style: { margin: '0' } }) : null,
+                h('span', null, children || '')
+            )
         }
 
         var classes = 'link ' + iconClass
@@ -77,6 +187,7 @@
         var disabled = props.disabled
         var onClick = props.onClick
         var fluid = props.fluid
+        var isNtos = isNtosCompatMode()
         var style = {}
 
         if (fluid) {
@@ -86,6 +197,48 @@
         }
         if (props.style) {
             for (var styleKey in props.style) style[styleKey] = props.style[styleKey]
+        }
+
+        if (isNtos) {
+            ensureNtosCompatStyles()
+            var theme = getNtosCompatTheme()
+            return h('button', {
+                type: 'button',
+                disabled: !!disabled,
+                class: 'suiNtosCompatActionLink',
+                id: props.id || null,
+                title: props.title || null,
+                onClick: disabled ? null : function (e) {
+                    e.preventDefault()
+                    if (onClick) onClick(e)
+                },
+                style: mergeStyles({
+                    display: fluid ? 'flex' : 'inline-flex',
+                    width: fluid ? '100%' : 'auto',
+                    boxSizing: 'border-box',
+                    alignItems: 'center',
+                    justifyContent: fluid ? 'flex-start' : 'center',
+                    gap: '6px',
+                    minHeight: '28px',
+                    padding: fluid ? '0 12px' : '0 10px',
+                    borderRadius: '2px',
+                    border: '1px solid ' + (selected ? '#475569' : theme.panelBorder),
+                    background: selected ? 'rgba(30,58,138,0.22)' : 'transparent',
+                    color: disabled ? '#67788b' : theme.muted,
+                    cursor: disabled ? 'default' : 'pointer',
+                    opacity: disabled ? '0.45' : '1',
+                    whiteSpace: fluid ? 'normal' : 'nowrap',
+                    textAlign: fluid ? 'left' : 'center',
+                    fontSize: '10px',
+                    fontWeight: '700',
+                    letterSpacing: '0.08em',
+                    textTransform: 'uppercase',
+                    fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+                }, style)
+            },
+                icon ? h('span', { class: 'uiIcon16 icon-' + icon, style: { margin: '0' } }) : null,
+                h('span', null, children || '')
+            )
         }
 
         var iconHtml = ''
@@ -127,6 +280,60 @@
         var style = props.style || {}
         var fill = props.fill
         var scrollable = props.scrollable
+        var isNtos = isNtosCompatMode()
+
+        if (isNtos) {
+            ensureNtosCompatStyles()
+            var theme = getNtosCompatTheme()
+            var sectionStyle = mergeStyles({
+                background: theme.panelBackground,
+                border: '1px solid ' + theme.panelBorder,
+                borderRadius: '0',
+                padding: '10px 12px',
+                boxSizing: 'border-box'
+            }, style)
+            if (fill) {
+                sectionStyle.display = 'flex'
+                sectionStyle.flexDirection = 'column'
+                sectionStyle.width = '100%'
+                sectionStyle.height = '100%'
+                sectionStyle.minHeight = '0'
+            }
+            var ntosContentStyle = null
+            if (fill || scrollable) {
+                ntosContentStyle = {
+                    minHeight: '0',
+                    overflowY: scrollable ? 'auto' : null,
+                    overflowX: scrollable ? 'hidden' : null
+                }
+                if (fill) ntosContentStyle.flex = '1 1 auto'
+            }
+
+            return h('section', {
+                style: sectionStyle,
+                class: props.className || props.class || null
+            },
+                title ? h('div', {
+                    style: {
+                        marginBottom: '10px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        color: theme.title,
+                        fontSize: '11px',
+                        fontWeight: '500',
+                        letterSpacing: '0.16em',
+                        textTransform: 'uppercase',
+                        fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+                    }
+                },
+                    h('div', { style: { height: '1px', flex: '1 1 auto', background: theme.panelBorder } }),
+                    h('div', { style: { flex: '0 0 auto', textAlign: 'center' } }, title),
+                    h('div', { style: { height: '1px', flex: '1 1 auto', background: theme.panelBorder } })
+                ) : null,
+                ntosContentStyle ? h('div', { style: ntosContentStyle }, children) : children
+            )
+        }
 
         var fieldsetStyle = {
             backgroundColor: '#202020',
@@ -343,10 +550,48 @@
     // LabeledList - list of label: value pairs
     // ============================================================
     function LabeledList(props) {
+        if (isNtosCompatMode()) {
+            ensureNtosCompatStyles()
+        }
         return h('div', null, props.children)
     }
 
     LabeledList.Item = function LabeledListItem(props) {
+        if (isNtosCompatMode()) {
+            var theme = getNtosCompatTheme()
+            return h('div', {
+                style: {
+                    display: 'grid',
+                    gridTemplateColumns: '110px minmax(0, 1fr)',
+                    columnGap: '10px',
+                    alignItems: 'start',
+                    padding: '6px 0',
+                    borderTop: props.first ? 'none' : '1px solid ' + theme.rowBorder
+                }
+            },
+                h('div', {
+                    style: {
+                        color: theme.subtle,
+                        fontSize: '10px',
+                        fontWeight: '500',
+                        letterSpacing: '0.12em',
+                        textTransform: 'uppercase',
+                        fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+                    }
+                }, props.label),
+                h('div', {
+                    style: {
+                        color: theme.text,
+                        fontSize: '12px',
+                        lineHeight: '14px',
+                        fontWeight: '600',
+                        minWidth: '0',
+                        wordBreak: 'break-word',
+                        fontFamily: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+                    }
+                }, props.children)
+            )
+        }
         return h('div', { class: 'item' },
             h('div', { class: 'itemLabel' }, props.label),
             h('div', { class: 'itemContent' }, props.children)
@@ -382,14 +627,43 @@
     // Table
     // ============================================================
     function Table(props) {
+        if (isNtosCompatMode()) {
+            ensureNtosCompatStyles()
+            var theme = getNtosCompatTheme()
+            return h('table', {
+                class: 'suiNtosCompatTable' + (props.class ? ' ' + props.class : ''),
+                style: mergeStyles({
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    borderSpacing: '0',
+                    background: 'transparent'
+                }, props.style || null)
+            }, props.children)
+        }
         return h('table', { class: props.class || '', style: props.style || null }, props.children)
     }
 
     Table.Row = function TableRow(props) {
+        if (isNtosCompatMode()) {
+            return h('tr', {
+                class: 'suiNtosCompatTableRow',
+                style: props.style || null
+            }, props.children)
+        }
         return h('tr', { style: props.style || null }, props.children)
     }
 
     Table.Cell = function TableCell(props) {
+        if (isNtosCompatMode()) {
+            var theme = getNtosCompatTheme()
+            return h('td', {
+                style: mergeStyles({
+                    fontSize: '12px',
+                    lineHeight: '14px',
+                    verticalAlign: 'top'
+                }, props.style || null)
+            }, props.children)
+        }
         return h('td', { style: props.style || null }, props.children)
     }
 
@@ -398,6 +672,23 @@
     // ============================================================
     function NoticeBox(props) {
         var danger = props.danger
+        if (isNtosCompatMode()) {
+            ensureNtosCompatStyles()
+            var theme = getNtosCompatTheme()
+            return h('div', {
+                class: 'notice',
+                style: {
+                    textAlign: 'left',
+                    marginBottom: '10px',
+                    padding: '10px 12px',
+                    border: '1px solid ' + (danger ? '#6a2d2d' : theme.panelBorder),
+                    background: danger ? '#261414' : theme.cardBackground,
+                    color: danger ? '#f1c1c1' : theme.text,
+                    fontSize: '11px',
+                    lineHeight: '15px'
+                }
+            }, props.children)
+        }
         var style = {
             textAlign: 'center',
             marginBottom: '15px',
@@ -418,7 +709,7 @@
     // ============================================================
 
     // Drag state (module-level, shared by all WindowChrome instances)
-    var _drag = { active: false, moved: false, startX: 0, startY: 0, winX: 0, winY: 0 }
+    var _drag = { active: false, moved: false, lastX: 0, lastY: 0, winX: 0, winY: 0, captureTarget: null }
 
     function _readWindowCoord(primaryKey, fallbackKey) {
         var primary = window[primaryKey]
@@ -439,12 +730,17 @@
         e.preventDefault()
         _drag.active = true
         _drag.moved = false
-        _drag.startX = e.screenX
-        _drag.startY = e.screenY
+        _drag.lastX = e.screenX
+        _drag.lastY = e.screenY
 
         // In BYOND/IE, screenLeft/Top gives the absolute monitor position
         _drag.winX = _readWindowCoord('screenLeft', 'screenX')
         _drag.winY = _readWindowCoord('screenTop', 'screenY')
+        _drag.captureTarget = e.currentTarget || e.target || null
+
+        if (_drag.captureTarget && _drag.captureTarget.setCapture) {
+            _drag.captureTarget.setCapture()
+        }
 
         document.addEventListener('mousemove', _onDragMove, true)
         document.addEventListener('mouseup', _onDragEnd, true)
@@ -453,28 +749,52 @@
     function _onDragMove(e) {
         if (!_drag.active) return
         e.preventDefault()
-        var dx = e.screenX - _drag.startX
-        var dy = e.screenY - _drag.startY
+        var dx = e.screenX - _drag.lastX
+        var dy = e.screenY - _drag.lastY
         if (!_drag.moved && Math.abs(dx) < 3 && Math.abs(dy) < 3) {
             return
         }
         _drag.moved = true
-        var nx = _drag.winX + dx
-        var ny = _drag.winY + dy
+        _drag.lastX = e.screenX
+        _drag.lastY = e.screenY
+        _drag.winX += dx
+        _drag.winY += dy
 
         var state = typeof SUI !== 'undefined' ? SUI.getState() : null
         var winId = (state && state.config && state.config.window_id) || window.name || ''
 
         if (winId) {
-            window.location.href = 'byond://winset?id=' + encodeURIComponent(winId) + ';pos=' + nx + ',' + ny
+            window.location.href = 'byond://winset?id=' + encodeURIComponent(winId) + ';pos=' + _drag.winX + ',' + _drag.winY
         }
     }
 
     function _onDragEnd(e) {
         _drag.active = false
         _drag.moved = false
+        if (_drag.captureTarget && _drag.captureTarget.releaseCapture) {
+            _drag.captureTarget.releaseCapture()
+        }
+        _drag.captureTarget = null
         document.removeEventListener('mousemove', _onDragMove, true)
         document.removeEventListener('mouseup', _onDragEnd, true)
+    }
+
+    function _getWindowId() {
+        var state = typeof SUI !== 'undefined' ? SUI.getState() : null
+        return (state && state.config && state.config.window_id) || window.name || ''
+    }
+
+    function _sendWinset(command) {
+        var winId = _getWindowId()
+        if (!winId) return
+        window.location.href = 'byond://winset?id=' + encodeURIComponent(winId) + ';' + command
+    }
+
+    function _getCurrentWindowSize() {
+        return {
+            width: window.innerWidth || document.documentElement.clientWidth || 520,
+            height: window.innerHeight || document.documentElement.clientHeight || 680
+        }
     }
 
     function WindowChrome(props) {
@@ -572,6 +892,259 @@
                         fontSize: '14px'
                     }
                 }, '\u00D7')))
+    }
+
+    // ============================================================
+    // SystemTopBar - reusable frameless pseudo-window controls bar
+    // ============================================================
+    function SystemTopBar(props) {
+        var onClose = props.onClose || function () { SUI.act('__close') }
+        var badge = props.badge
+        var draggable = props.draggable !== false
+        var _useState = useState(false)
+        var isMaximized = _useState[0]
+        var setIsMaximized = _useState[1]
+        var _useState2 = useState(false)
+        var isMinimized = _useState2[0]
+        var setIsMinimized = _useState2[1]
+        var lastNormalSizeRef = useRef(_getCurrentWindowSize())
+
+        function sendWindowSize(width, height) {
+            _sendWinset('size=' + Math.max(1, Math.round(width)) + 'x' + Math.max(1, Math.round(height)))
+        }
+
+        useEffect(function () {
+            function rememberWindowSize() {
+                if (isMaximized || isMinimized) return
+                lastNormalSizeRef.current = _getCurrentWindowSize()
+            }
+
+            rememberWindowSize()
+            window.addEventListener('resize', rememberWindowSize)
+            return function () {
+                window.removeEventListener('resize', rememberWindowSize)
+            }
+        }, [isMaximized, isMinimized])
+
+        function handleMinimize() {
+            if (props.onMinimize) {
+                props.onMinimize(isMinimized)
+                return
+            }
+            if (!isMinimized) {
+                lastNormalSizeRef.current = _getCurrentWindowSize()
+                if (isMaximized) {
+                    _sendWinset('is-maximized=false')
+                    setIsMaximized(false)
+                }
+                sendWindowSize(lastNormalSizeRef.current.width, props.minimizedHeight || 36)
+                setIsMinimized(true)
+                return
+            }
+
+            var restoreSize = lastNormalSizeRef.current || {
+                width: props.restoreWidth || 520,
+                height: props.restoreHeight || 680
+            }
+            sendWindowSize(restoreSize.width, restoreSize.height)
+            setIsMinimized(false)
+        }
+
+        function handleMaximize() {
+            if (props.onMaximize) {
+                props.onMaximize(isMaximized)
+                return
+            }
+            if (isMinimized) {
+                var restoreSize = lastNormalSizeRef.current || {
+                    width: props.restoreWidth || 520,
+                    height: props.restoreHeight || 680
+                }
+                sendWindowSize(restoreSize.width, restoreSize.height)
+                setIsMinimized(false)
+            }
+            var nextValue = !isMaximized
+            if (nextValue) {
+                lastNormalSizeRef.current = _getCurrentWindowSize()
+                _sendWinset('is-maximized=true')
+                setIsMaximized(true)
+                return
+            }
+            _sendWinset('is-maximized=' + (nextValue ? 'true' : 'false'))
+            setIsMaximized(false)
+            window.setTimeout(function () {
+                var restoreSize = lastNormalSizeRef.current || {
+                    width: props.restoreWidth || 520,
+                    height: props.restoreHeight || 680
+                }
+                sendWindowSize(restoreSize.width, restoreSize.height)
+            }, 30)
+        }
+
+        return h('div', {
+            class: props.className || props.class || null,
+            onMouseDown: draggable ? _initDrag : null,
+            style: props.style || {
+                height: '28px',
+                background: '#dce9e2',
+                color: '#0f172a',
+                borderBottom: '1px solid rgba(15,23,42,0.28)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0 8px',
+                boxSizing: 'border-box',
+                cursor: draggable ? 'move' : 'default'
+            }
+        },
+            h('div', {
+                style: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                }
+            },
+                badge || h('div', {
+                    style: {
+                        width: '14px',
+                        height: '14px',
+                        borderRadius: '50%',
+                        background: 'radial-gradient(circle at 35% 35%, #fde68a, #f97316 72%)',
+                        boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.42)'
+                    }
+                })
+            ),
+            h('div', {
+                style: {
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '2px'
+                },
+                onMouseDown: function (e) { e.stopPropagation() }
+            },
+                h(SystemTopBar.Button, {
+                    label: '\u2013',
+                    title: isMinimized ? 'Restore' : 'Minimize',
+                    onClick: handleMinimize
+                }),
+                h(SystemTopBar.Button, {
+                    label: isMaximized ? '\u2752' : '\u25A1',
+                    title: isMaximized ? 'Restore' : 'Maximize',
+                    onClick: handleMaximize
+                }),
+                h(SystemTopBar.Button, {
+                    label: '\u00D7',
+                    title: 'Close',
+                    danger: true,
+                    onClick: onClose
+                })
+            )
+        )
+    }
+
+    SystemTopBar.Button = function SystemTopBarButton(props) {
+        return h('div', {
+            title: props.title,
+            onClick: function (e) {
+                e.preventDefault()
+                e.stopPropagation()
+                if (props.onClick) props.onClick(e)
+            },
+            style: {
+                width: '26px',
+                height: '20px',
+                lineHeight: '18px',
+                textAlign: 'center',
+                color: props.danger ? '#7f1d1d' : '#0f172a',
+                background: 'transparent',
+                border: '1px solid transparent',
+                fontSize: '12px',
+                cursor: 'pointer',
+                userSelect: 'none'
+            },
+            onMouseEnter: function (e) {
+                e.currentTarget.style.background = props.danger ? 'rgba(127,29,29,0.22)' : 'rgba(15,23,42,0.08)'
+                e.currentTarget.style.borderColor = props.danger ? 'rgba(127,29,29,0.22)' : 'rgba(15,23,42,0.12)'
+            },
+            onMouseLeave: function (e) {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.borderColor = 'transparent'
+            }
+        }, props.label)
+    }
+
+    function WindowResizeHandle(props) {
+        var dragRef = useRef(null)
+
+        function onMouseDown(e) {
+            if (e.button !== 0) return
+            e.preventDefault()
+            e.stopPropagation()
+
+            dragRef.current = {
+                lastX: e.screenX,
+                lastY: e.screenY,
+                width: _getCurrentWindowSize().width,
+                height: _getCurrentWindowSize().height,
+                captureTarget: e.currentTarget || e.target || null
+            }
+
+            if (dragRef.current.captureTarget && dragRef.current.captureTarget.setCapture) {
+                dragRef.current.captureTarget.setCapture()
+            }
+
+            document.addEventListener('mousemove', onMouseMove, true)
+            document.addEventListener('mouseup', onMouseUp, true)
+        }
+
+        function onMouseMove(e) {
+            if (!dragRef.current) return
+            e.preventDefault()
+
+            var dx = e.screenX - dragRef.current.lastX
+            var dy = e.screenY - dragRef.current.lastY
+            if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+                return
+            }
+            dragRef.current.lastX = e.screenX
+            dragRef.current.lastY = e.screenY
+            dragRef.current.width = Math.max(props.minWidth || 420, dragRef.current.width + dx)
+            dragRef.current.height = Math.max(props.minHeight || 320, dragRef.current.height + dy)
+            var nextWidth = dragRef.current.width
+            var nextHeight = dragRef.current.height
+            _sendWinset('is-maximized=false;size=' + Math.round(nextWidth) + 'x' + Math.round(nextHeight))
+        }
+
+        function onMouseUp() {
+            if (dragRef.current && dragRef.current.captureTarget && dragRef.current.captureTarget.releaseCapture) {
+                dragRef.current.captureTarget.releaseCapture()
+            }
+            dragRef.current = null
+            document.removeEventListener('mousemove', onMouseMove, true)
+            document.removeEventListener('mouseup', onMouseUp, true)
+        }
+
+        useEffect(function () {
+            return function () {
+                document.removeEventListener('mousemove', onMouseMove, true)
+                document.removeEventListener('mouseup', onMouseUp, true)
+            }
+        }, [])
+
+        return h('div', {
+            class: props.className || props.class || null,
+            title: props.title || 'Resize',
+            onMouseDown: onMouseDown,
+            style: props.style || {
+                position: 'absolute',
+                right: '2px',
+                bottom: '2px',
+                width: '14px',
+                height: '14px',
+                cursor: 'nwse-resize',
+                zIndex: 6
+            }
+        }, props.children)
     }
 
     // ============================================================
@@ -1140,6 +1713,8 @@
     SUI.Table = Table
     SUI.NoticeBox = NoticeBox
     SUI.WindowChrome = WindowChrome
+    SUI.SystemTopBar = SystemTopBar
+    SUI.WindowResizeHandle = WindowResizeHandle
     SUI.Tabs = Tabs
     SUI.NumberInput = NumberInput
     SUI.Dropdown = Dropdown

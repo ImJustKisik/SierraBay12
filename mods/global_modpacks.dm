@@ -38,6 +38,7 @@
 #include "utility_items/_utility_items_includes.dm"
 #include "mechs_by_shegar/_mechs_by_shegar_includes.dm"
 #include "newUI/_newUI_includes.dm"
+#include "sui/_sui_includes.dm"
 #include "weather/_weather_includes.dm"
 #include "anomaly/_anomaly_includes.dm"
 #include "bouquet_by_hakso/_bouquet_by_hakso_includes.dm"

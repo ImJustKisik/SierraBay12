@@ -578,10 +578,15 @@
 		list("interface" = "Docking", "module" = /datum/nano_module/program/docking),
 		list("interface" = "ArcadeClassic", "module" = /datum/nano_module/program/arcade_classic),
 		list("interface" = "Scanner", "module" = /datum/nano_module/program/scanner),
+		list("interface" = "Library", "module" = /datum/nano_module/program/library),
+		list("interface" = "DeckManagement", "module" = /datum/nano_module/program/deck_management),
 		list("interface" = "AIDiag", "module" = /datum/nano_module/program/computer_aidiag),
+		list("interface" = "NTNRCClient", "module" = /datum/nano_module/program/computer_chatclient),
 		list("interface" = "NTNetMonitor", "module" = /datum/nano_module/program/computer_ntnetmonitor),
 		list("interface" = "ForceAuthorization", "module" = /datum/nano_module/program/forceauthorization),
+		list("interface" = "CardMod", "module" = /datum/nano_module/program/card_mod),
 		list("interface" = "EngineControl", "module" = /datum/nano_module/program/ship/engine_control),
+		list("interface" = "Munitions", "module" = /datum/nano_module/program/munitions),
 		list("interface" = "PowerMonitor", "module" = /datum/nano_module/program/power_monitor),
 		list("interface" = "AlarmMonitor", "module" = /datum/nano_module/program/alarm_monitor/engineering),
 		list("interface" = "AtmosControl", "module" = /datum/nano_module/program/atmos_control),
@@ -593,6 +598,7 @@
 		list("interface" = "DigitalWarrant", "module" = /datum/nano_module/program/digitalwarrant),
 		list("interface" = "EmailAdministration", "module" = /datum/nano_module/program/email_administration),
 		list("interface" = "EmailClient", "module" = /datum/nano_module/program/email_client),
+		list("interface" = "Supply", "module" = /datum/nano_module/program/supply),
 		list("interface" = "Comm", "module" = /datum/nano_module/program/comm),
 		list("interface" = "FileManager", "module" = /datum/nano_module/program/computer_filemanager),
 		list("interface" = "CrewMonitor", "module" = /datum/nano_module/program/crew_monitor),
@@ -615,11 +621,6 @@
 			number_of_failures++
 		qdel(module)
 
-	var/datum/nano_module/program/supply/unmigrated = new(host, null, null)
-	if(unmigrated.sui_interface_name)
-		log_bad("Expected unmigrated /datum/nano_module/program/supply to remain on NanoUI path (no sui_interface_name).")
-		number_of_failures++
-	qdel(unmigrated)
 	qdel(host)
 
 	if(number_of_failures)
@@ -634,6 +635,7 @@
 /datum/unit_test/nanoui_sui_compat_interface_asset_shall_register/start_test()
 	var/singleton/asset_registry_v2/registry = GET_SINGLETON(/singleton/asset_registry_v2)
 	var/number_of_failures = 0
+	var/datum/asset_entry_v2/nanocompat_entry
 
 	if(!registry.ensure_sui_interface_registered("NanoCompat"))
 		log_bad("Expected NanoCompat interface asset to be registerable.")
@@ -641,6 +643,44 @@
 	if(!registry.packs[ASSET_PACK_NANOUI_COMPAT])
 		log_bad("Expected NanoUI compat asset pack to exist.")
 		number_of_failures++
+	nanocompat_entry = registry.assets_by_logical_id["sui.interface.nanocompat"]
+	if(!istype(nanocompat_entry))
+		log_bad("Expected NanoCompat asset entry to exist after registration.")
+		number_of_failures++
+	else if(!findtext("[nanocompat_entry.source]", "mods/sui/js/sui_nanocompat.js"))
+		log_bad("Expected NanoCompat asset to resolve from mods/sui, got [nanocompat_entry.source].")
+		number_of_failures++
+
+	if(number_of_failures)
+		fail("[number_of_failures] failed assertion\s.")
+	else
+		pass("All assertions passed.")
+	return TRUE
+
+/datum/unit_test/sui_common_assets_shall_resolve_from_modpack
+	name = "SUI - common assets shall resolve from mods/sui"
+
+/datum/unit_test/sui_common_assets_shall_resolve_from_modpack/start_test()
+	var/singleton/asset_registry_v2/registry = GET_SINGLETON(/singleton/asset_registry_v2)
+	var/number_of_failures = 0
+	var/list/expected_assets = list(
+		"sui.js.preact_min" = "mods/sui/js/libraries/preact.min.js",
+		"sui.js.preact_hooks_min" = "mods/sui/js/libraries/preact-hooks.min.js",
+		"sui.js.core" = "mods/sui/js/sui.js",
+		"sui.js.components" = "mods/sui/js/sui_components.js",
+		"sui.js.ntos_common" = "mods/sui/js/sui_ntos_common.js"
+	)
+
+	for(var/logical_id in expected_assets)
+		var/datum/asset_entry_v2/entry = registry.assets_by_logical_id[logical_id]
+		if(!istype(entry))
+			log_bad("Expected [logical_id] asset entry to exist.")
+			number_of_failures++
+			continue
+		var/expected_path = expected_assets[logical_id]
+		if(!findtext("[entry.source]", expected_path))
+			log_bad("Expected [logical_id] to resolve from [expected_path], got [entry.source].")
+			number_of_failures++
 
 	if(number_of_failures)
 		fail("[number_of_failures] failed assertion\s.")

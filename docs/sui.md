@@ -453,6 +453,8 @@ JS:
 
 ## Migration Status (Iteration 3)
 
+Detailed categorized backlog: [sui_migration_backlog.md](./sui_migration_backlog.md)
+
 ### Migrated
 
 - Standalone:
