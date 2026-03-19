@@ -281,7 +281,7 @@
 	var/list/ui_data = get_atm_ui_data()
 	var/datum/sui/ui = SSnano.try_update_sui(user, src, "main")
 	if(!ui)
-		ui = new /datum/sui(user, src, "ATM", machine_id, 560, 720)
+		ui = new /datum/sui(user, src, "ATM", machine_id, 760, 800)
 		ui.set_auto_update(TRUE)
 		ui.open(ui_data)
 	else
