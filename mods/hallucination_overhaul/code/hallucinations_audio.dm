@@ -79,14 +79,15 @@
 		if(talker.stat)
 			continue
 		var/message
-		var/display_name = talker.fake_name ? talker.fake_name : talker.real_name
+		var/display_name = transliterate_en2ru(talker.fake_name ? talker.fake_name : talker.real_name)
 		if(!display_name)
 			continue
 		feedback_details = " Speaker: [display_name]"
 		if(prob(80))
 			var/list/names = list()
-			var/lastname = copytext(holder.real_name, findtext(holder.real_name, " ") + 1)
-			var/firstname = copytext(holder.real_name, 1, findtext(holder.real_name, " "))
+			var/translit_name = transliterate_en2ru(holder.real_name)
+			var/lastname = copytext(translit_name, findtext(translit_name, " ") + 1)
+			var/firstname = copytext(translit_name, 1, findtext(translit_name, " "))
 			if(lastname)
 				names += lastname
 			if(firstname)

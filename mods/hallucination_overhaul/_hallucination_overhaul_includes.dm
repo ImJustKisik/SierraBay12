@@ -2,6 +2,7 @@
 #define MODPACK_HALLUCINATION_OVERHAUL
 
 #include "_hallucination_overhaul.dm"
+#include "code/transliteration.dm"
 #include "code/hallucinations_base.dm"
 #include "code/hallucinations_actors.dm"
 #include "code/hallucinations_audio.dm"

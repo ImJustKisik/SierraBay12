@@ -393,7 +393,8 @@ var/global/list/hallucination_observed_tells = load_hallucination_config("config
 
 		candidates += H.real_name
 
-	return length(candidates) ? pick(candidates) : null
+	var/picked = length(candidates) ? pick(candidates) : null
+	return picked ? transliterate_en2ru(picked) : null
 
 /mob/living/carbon/proc/random_station_area_name()
 	var/static/list/area_names
@@ -419,7 +420,8 @@ var/global/list/hallucination_observed_tells = load_hallucination_config("config
 		if(H.z != z || get_dist(H, src) < min_distance)
 			continue
 		candidates += H.real_name
-	return length(candidates) ? pick(candidates) : null
+	var/picked = length(candidates) ? pick(candidates) : null
+	return picked ? transliterate_en2ru(picked) : null
 
 /mob/living/carbon/proc/random_hallucination_turf(min_distance = 1, max_distance = 7, require_floor = FALSE)
 	var/list/candidates = list()
