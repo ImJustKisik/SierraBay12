@@ -13,3 +13,13 @@
 
 #define COMSIG_CABINE_OPEN "cabine_open"
 #define COMSIG_CABINE_CLOSED "cabine_closed"
+
+//BOTS
+#define COMSIG_FARMBOT_TARGET_AVAILABLE "farmbot_target_available" // hydroponics tray стало целью для farmbot
+#define COMSIG_FARMBOT_TARGET_CLEARED "farmbot_target_cleared" // hydroponics tray больше не требует внимания farmbot
+
+#define FARMBOT_TARGET_SCAN_RANGE 7
+#define FARMBOT_ATTENTION_COLLECT FLAG_01
+#define FARMBOT_ATTENTION_WATER FLAG_02
+#define FARMBOT_ATTENTION_UPROOT FLAG_03
+#define FARMBOT_ATTENTION_NUTRIMENT FLAG_04
