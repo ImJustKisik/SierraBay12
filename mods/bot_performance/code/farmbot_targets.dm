@@ -4,7 +4,7 @@ GLOBAL_TYPED_NEW(farmbot_target_bus, /datum/farmbot_target_bus)
 GLOBAL_LIST_EMPTY(farmbot_attention_targets)
 
 /obj/machinery/portable_atmospherics/hydroponics
-	/// Cached farmbot attention flags. A non-zero value means the tray is present in GLOB.farmbot_attention_targets.
+	/// Cached raw farmbot attention flags. Per-bot policy is still filtered through /mob/living/bot/farmbot/confirmTarget().
 	var/farmbot_attention_flags = 0
 
 /obj/machinery/portable_atmospherics/hydroponics/proc/get_farmbot_attention_flags()
@@ -13,13 +13,13 @@ GLOBAL_LIST_EMPTY(farmbot_attention_targets)
 
 	. = 0
 	if(dead || harvest)
-		. |= FARMBOT_NEED_COLLECT
+		. |= FARMBOT_ATTENTION_COLLECT
 	if(waterlevel < 40 && !reagents.has_reagent(/datum/reagent/water))
-		. |= FARMBOT_NEED_WATER
+		. |= FARMBOT_ATTENTION_WATER
 	if(weedlevel > 3)
-		. |= FARMBOT_NEED_UPROOT
+		. |= FARMBOT_ATTENTION_UPROOT
 	if(nutrilevel < 1 && reagents.total_volume < 1)
-		. |= FARMBOT_NEED_NUTRIMENT
+		. |= FARMBOT_ATTENTION_NUTRIMENT
 
 /obj/machinery/portable_atmospherics/hydroponics/proc/update_farmbot_attention()
 	var/new_flags = get_farmbot_attention_flags()
@@ -57,12 +57,51 @@ GLOBAL_LIST_EMPTY(farmbot_attention_targets)
 	. = ..()
 	update_farmbot_attention()
 
+/obj/machinery/portable_atmospherics/hydroponics/proc/harvest(mob/user)
+	. = ..()
+	update_farmbot_attention()
+
+/obj/machinery/portable_atmospherics/hydroponics/proc/remove_dead(mob/user, silent)
+	. = ..()
+	update_farmbot_attention()
+
+/obj/machinery/portable_atmospherics/hydroponics/proc/weed_invasion()
+	. = ..()
+	update_farmbot_attention()
+
+/obj/machinery/portable_atmospherics/hydroponics/proc/mutate(severity)
+	. = ..()
+	update_farmbot_attention()
+
+/obj/machinery/portable_atmospherics/hydroponics/proc/mutate_species()
+	. = ..()
+	update_farmbot_attention()
+
+/obj/machinery/portable_atmospherics/hydroponics/proc/plant_seed(mob/user, obj/item/seeds/S)
+	. = ..()
+	update_farmbot_attention()
+
+/obj/machinery/portable_atmospherics/hydroponics/proc/plant()
+	. = ..()
+	update_farmbot_attention()
+
+/obj/machinery/portable_atmospherics/hydroponics/proc/close_lid(mob/living/user)
+	. = ..()
+	update_farmbot_attention()
+
+/obj/machinery/portable_atmospherics/hydroponics/use_tool(obj/item/O, mob/living/user, list/click_params)
+	. = ..()
+	update_farmbot_attention()
+
 /mob/living/bot/farmbot
+	uses_guarded_ai = TRUE
+	uses_target_repath_throttle = TRUE
 	/// Chosen adjacent turf near the current hydroponics tray target.
 	var/turf/target_adjacent_turf = null
 	/// Safety reconciliation interval for state that existed before this bot subscribed to signals.
 	var/next_farmbot_reconcile_at = 0
 	var/farmbot_reconcile_cooldown = 300
+	var/farmbot_target_range = FARMBOT_TARGET_SCAN_RANGE
 
 /mob/living/bot/farmbot/Initialize(mapload, newTank)
 	. = ..()
@@ -77,13 +116,13 @@ GLOBAL_LIST_EMPTY(farmbot_attention_targets)
 
 /mob/living/bot/farmbot/proc/on_farmbot_target_available(datum/source, obj/machinery/portable_atmospherics/hydroponics/tray, flags)
 	SIGNAL_HANDLER
-	if(!on || busy || target)
+	if(!on || busy || target || emagged)
 		return
 	if(!tray || !tray.loc)
 		return
 	if(get_z(src) != get_z(tray))
 		return
-	if(get_dist(src, tray) > 7)
+	if(get_dist(src, tray) > farmbot_target_range)
 		return
 	if(!confirmTarget(tray))
 		return
@@ -98,33 +137,46 @@ GLOBAL_LIST_EMPTY(farmbot_attention_targets)
 		resetTarget()
 
 /mob/living/bot/farmbot/proc/reconcileFarmbotTargets()
-	if(!on || busy || target)
+	if(!on || busy || target || emagged)
 		return
+
+	var/list/invalid_trays = list()
 	for(var/obj/machinery/portable_atmospherics/hydroponics/tray as anything in GLOB.farmbot_attention_targets)
 		if(!tray || !tray.loc)
-			GLOB.farmbot_attention_targets -= tray
+			invalid_trays += tray
 			continue
 		if(get_z(src) != get_z(tray))
 			continue
-		if(get_dist(src, tray) > 7)
+		if(get_dist(src, tray) > farmbot_target_range)
 			continue
 		if(confirmTarget(tray))
 			target = tray
 			target_path = list()
 			target_adjacent_turf = null
 			cached_target_path_goal = null
-			return
+			break
+
+	for(var/obj/machinery/portable_atmospherics/hydroponics/invalid_tray as anything in invalid_trays)
+		GLOB.farmbot_attention_targets -= invalid_tray
 
 /mob/living/bot/farmbot/lookForTargets()
+	if(emagged)
+		for(var/mob/living/carbon/human/H in view(farmbot_target_range, src))
+			if(confirmTarget(H))
+				target = H
+				return
+		return
+
 	reconcileFarmbotTargets()
 	if(target)
 		return
 
 	// Keep water refill behavior, but avoid scanning hydro trays every AI cycle.
 	if(refills_water && tank && tank.reagents.total_volume < tank.reagents.maximum_volume)
-		for(var/obj/structure/hygiene/sink/source in view(7, src))
-			target = source
-			return
+		for(var/obj/structure/hygiene/sink/source in view(farmbot_target_range, src))
+			if(confirmTarget(source))
+				target = source
+				return
 
 	if(world.time >= next_farmbot_reconcile_at)
 		next_farmbot_reconcile_at = world.time + farmbot_reconcile_cooldown
@@ -134,9 +186,19 @@ GLOBAL_LIST_EMPTY(farmbot_attention_targets)
 	. = ..()
 	reconcileFarmbotTargets()
 
+/mob/living/bot/farmbot/turn_off()
+	. = ..()
+	target_adjacent_turf = null
+
 /mob/living/bot/farmbot/ProcessCommand(mob/user, command, href_list)
 	. = ..()
 	reconcileFarmbotTargets()
+
+/mob/living/bot/farmbot/UnarmedAttack(atom/A, proximity)
+	var/obj/machinery/portable_atmospherics/hydroponics/tray = istype(A, /obj/machinery/portable_atmospherics/hydroponics) ? A : null
+	. = ..()
+	if(tray && !QDELETED(tray))
+		tray.update_farmbot_attention()
 
 /mob/living/bot/farmbot/calcTargetPath()
 	target_path = list()
@@ -176,8 +238,10 @@ GLOBAL_LIST_EMPTY(farmbot_attention_targets)
 		return
 
 	if(!length(target_path) || !target_adjacent_turf || !target_turf.Adjacent(target_adjacent_turf))
-		if(!canRepathTarget())
-			return
+		if(uses_target_repath_throttle)
+			if(!canRepathTarget())
+				return
+			markRepathAttempt()
 		calcTargetPath()
 
 	if(makeStep(target_path))
