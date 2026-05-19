@@ -167,8 +167,10 @@ GLOBAL_LIST_EMPTY(farmbot_attention_targets)
 		return
 
 /mob/living/bot/farmbot/stepToTarget()
+	if(!target || !target.loc)
+		return
 	var/turf/target_turf = get_turf(target)
-	if(!target || !target.loc || !target_turf)
+	if(!target_turf)
 		return
 	if(Adjacent(target))
 		return
