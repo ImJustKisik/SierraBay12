@@ -9,7 +9,7 @@
 	var/next_target_pathfind_at = 0
 	/// Minimum delay between target path recalculations.
 	var/target_pathfind_cooldown = 10
-	/// Cached path goal used to avoid repeatedly rebuilding an unchanged path.
+	/// Cached path goal used by opt-in throttled bots.
 	var/turf/cached_target_path_goal = null
 
 /mob/living/bot/Life()
@@ -52,11 +52,13 @@
 		return
 	if(get_dist(src, target) > min_target_dist)
 		var/turf/target_turf = get_turf(target)
-		if(!length(target_path) || target_turf != cached_target_path_goal)
-			if(uses_target_repath_throttle)
+		if(uses_target_repath_throttle)
+			if(!length(target_path) || target_turf != cached_target_path_goal)
 				if(!canRepathTarget())
 					return
 				markRepathAttempt()
+				calcTargetPath()
+		else if(!length(target_path) || target_turf != target_path[length(target_path)])
 			calcTargetPath()
 		if(makeStep(target_path))
 			frustration = 0
