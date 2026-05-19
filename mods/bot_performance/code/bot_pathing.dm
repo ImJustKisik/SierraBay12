@@ -1,6 +1,10 @@
 /mob/living/bot
+	/// Opt-in guard for spawned handleAI() chains. Disabled by default to preserve non-farmbot behavior.
+	var/uses_guarded_ai = FALSE
 	/// Prevent overlapping handleAI() chains from the spawned Life() callback.
 	var/bot_ai_running = FALSE
+	/// Opt-in target A* throttle. Disabled by default to preserve non-farmbot behavior.
+	var/uses_target_repath_throttle = FALSE
 	/// Next world.time at which this bot may run A* for target chasing.
 	var/next_target_pathfind_at = 0
 	/// Minimum delay between target path recalculations.
@@ -17,17 +21,31 @@
 	stunned = 0
 	paralysis = 0
 
-	if(on && !client && !busy && !bot_ai_running)
-		bot_ai_running = TRUE
-		spawn(0)
-			handleAI()
-			bot_ai_running = FALSE
+	if(on && !client && !busy)
+		if(uses_guarded_ai)
+			if(!bot_ai_running)
+				spawn(0)
+					run_guarded_ai()
+		else
+			spawn(0)
+				handleAI()
+
+/mob/living/bot/proc/run_guarded_ai()
+	if(bot_ai_running)
+		return
+	bot_ai_running = TRUE
+	try
+		handleAI()
+	catch(var/exception/e)
+		bot_ai_running = FALSE
+		throw e
+	bot_ai_running = FALSE
 
 /mob/living/bot/proc/canRepathTarget()
-	if(world.time < next_target_pathfind_at)
-		return FALSE
+	return world.time >= next_target_pathfind_at
+
+/mob/living/bot/proc/markRepathAttempt()
 	next_target_pathfind_at = world.time + target_pathfind_cooldown
-	return TRUE
 
 /mob/living/bot/proc/stepToTarget()
 	if(!target || !target.loc)
@@ -35,8 +53,10 @@
 	if(get_dist(src, target) > min_target_dist)
 		var/turf/target_turf = get_turf(target)
 		if(!length(target_path) || target_turf != cached_target_path_goal)
-			if(!canRepathTarget())
-				return
+			if(uses_target_repath_throttle)
+				if(!canRepathTarget())
+					return
+				markRepathAttempt()
 			calcTargetPath()
 		if(makeStep(target_path))
 			frustration = 0
@@ -60,3 +80,15 @@
 	cached_target_path_goal = null
 	frustration = 0
 	obstacle = null
+
+/mob/living/bot/proc/turn_off()
+	. = ..()
+	bot_ai_running = FALSE
+
+/mob/living/bot/proc/death()
+	bot_ai_running = FALSE
+	return ..()
+
+/mob/living/bot/Destroy()
+	bot_ai_running = FALSE
+	return ..()
