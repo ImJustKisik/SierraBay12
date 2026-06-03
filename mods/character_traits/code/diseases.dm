@@ -399,6 +399,11 @@
 	health_controllers += H
 	H.Start()
 
+/mob/living/carbon/human/proc/add_diabetes()
+	var/datum/diabetes_controller/H = new /datum/diabetes_controller(src)
+	health_controllers += H
+	H.Start()
+
 
 /datum/nicotine_dependency_controller
 	var/mob/living/carbon/human/owner
@@ -574,4 +579,136 @@
 
 	next_process_time = world.time + 15 SECONDS
 	addtimer(new Callback(src, .proc/ProcessSugar), 15 SECONDS)
+
+
+/datum/diabetes_controller
+	var/mob/living/carbon/human/owner
+	var/running = FALSE
+	var/blood_sugar = 100
+	var/last_state = "normal"
+	var/next_process_time = 0
+	var/beep_timer = 0
+
+	var/list/hyper_severe_phrases = list(
+		"Голова раскалывается, во рту жутко пересохло, безумно хочется пить...",
+		"Дыхание становится тяжёлым, перед глазами всё плывёт.",
+		"Слабость сковывает ваше тело, кажется, уровень сахара запредельно высок...",
+		"Кажется, вам срочно нужна инъекция инсулина!"
+	)
+	var/list/hyper_mild_phrases = list(
+		"Во рту пересохло, хочется пить.",
+		"Голова слегка кружится, во рту чувствуется странный привкус.",
+		"Вы чувствуете необычную утомляемость."
+	)
+	var/list/hypo_severe_phrases = list(
+		"Тело бьёт сильная дрожь, в глазах темнеет, силы полностью покидают вас!",
+		"Вы едва держитесь на ногах, голова кружится, срочно нужен сахар!",
+		"Холодный пот проступает на лбу, сознание путается... Нужна глюкоза!",
+		"Вы вот-вот упадёте в обморок от недостатка сахара в крови..."
+	)
+	var/list/hypo_mild_phrases = list(
+		"Руки слегка дрожат, накатывает внезапное чувство голода.",
+		"Вы чувствуете слабость в коленях и лёгкий тремор.",
+		"Кажется, уровень сахара падает, стоит съесть что-нибудь сладкое."
+	)
+
+/datum/diabetes_controller/New(mob/living/carbon/human/H)
+	..()
+	owner = H
+
+/datum/diabetes_controller/proc/Start()
+	if(running || !owner) return
+	running = TRUE
+	ProcessDiabetes()
+
+/datum/diabetes_controller/proc/Stop()
+	running = FALSE
+
+/datum/diabetes_controller/proc/ProcessDiabetes()
+	if(!running || !owner || owner.stat == DEAD) return
+
+	// Проверка инсулиновой помпы
+	var/has_insulin_pump = FALSE
+	for(var/obj/item/implant/insulin_pump/P in owner)
+		if(P.implanted && !P.malfunction)
+			has_insulin_pump = TRUE
+			if(blood_sugar > 140 && P.insulin_amount > 0)
+				var/inject = min(P.insulin_amount, 1)
+				P.insulin_amount -= inject
+				owner.reagents.add_reagent(/datum/reagent/insulin, inject)
+				beep_timer++
+				if(beep_timer >= 4)
+					to_chat(owner, SPAN_NOTICE("Вы слышите тихое жужжание инсулиновой помпы."))
+					beep_timer = 0
+			break
+
+	var/sugar_amount = 0
+	var/insulin_amount = 0
+	if(owner.reagents)
+		for(var/datum/reagent/R in owner.reagents.reagent_list)
+			if(R.sugar_amount > 0)
+				sugar_amount += R.volume * R.sugar_amount
+			if(istype(R, /datum/reagent/insulin))
+				insulin_amount += R.volume
+
+	// 1. Применение инсулина
+	if(insulin_amount > 0)
+		blood_sugar = max(10, blood_sugar - insulin_amount * 8)
+	
+	// 2. Применение сахара
+	if(sugar_amount > 0)
+		blood_sugar = min(250, blood_sugar + sugar_amount * 6)
+	
+	// 3. Естественное потребление глюкозы
+	if(insulin_amount == 0 && sugar_amount == 0)
+		blood_sugar = max(10, blood_sugar - 1.5)
+
+	// 4. Определение текущего состояния
+	var/current_state = "normal"
+	if(blood_sugar > 180)
+		current_state = "hyper_severe"
+	else if(blood_sugar > 140)
+		current_state = "hyper_mild"
+	else if(blood_sugar < 45)
+		current_state = "hypo_severe"
+	else if(blood_sugar < 70)
+		current_state = "hypo_mild"
+
+	// 5. Обработка эффектов и сообщений
+	switch(current_state)
+		if("hyper_severe")
+			owner.adjustToxLoss(1.5)
+			owner.eye_blurry = max(owner.eye_blurry, 8)
+			owner.adjust_stamina(-5)
+			owner.drowsyness = max(owner.drowsyness, 10)
+			if(prob(20))
+				to_chat(owner, SPAN_DANGER(pick(hyper_severe_phrases)))
+				if(prob(50))
+					owner.emote("groan")
+		if("hyper_mild")
+			owner.eye_blurry = max(owner.eye_blurry, 3)
+			owner.adjust_stamina(-2)
+			if(prob(10))
+				to_chat(owner, SPAN_WARNING(pick(hyper_mild_phrases)))
+		if("hypo_severe")
+			owner.make_jittery(8)
+			owner.adjustOxyLoss(1.5)
+			owner.adjust_stamina(-8)
+			owner.drowsyness = max(owner.drowsyness, 15)
+			if(prob(20))
+				to_chat(owner, SPAN_DANGER(pick(hypo_severe_phrases)))
+				if(prob(50))
+					owner.emote("shiver")
+		if("hypo_mild")
+			owner.make_jittery(3)
+			owner.adjust_stamina(-3)
+			if(prob(10))
+				to_chat(owner, SPAN_WARNING(pick(hypo_mild_phrases)))
+		if("normal")
+			if(last_state != "normal")
+				to_chat(owner, SPAN_NOTICE("Ваше самочувствие улучшилось, уровень сахара стабилизировался."))
+
+	last_state = current_state
+	next_process_time = world.time + 15 SECONDS
+	addtimer(new Callback(src, .proc/ProcessDiabetes), 15 SECONDS)
 

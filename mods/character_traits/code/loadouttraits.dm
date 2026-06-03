@@ -121,3 +121,29 @@
 	flags = GEAR_HAS_NO_CUSTOMIZATION
 	allowed_mod_traits = list("Disease - Sweet Tooth")
 
+/obj/item/reagent_containers/hypospray/autoinjector/pouch_auto/insulin
+	name = "emergency insulin autoinjector"
+	desc = "Одноразовый автоинъектор с 5 единицами инсулина. Быстро снижает критический уровень сахара."
+	starts_with = list(/datum/reagent/insulin = 5)
+
+/obj/item/storage/box/diabetes
+	name = "box of insulin autoinjectors"
+	desc = "Коробка с пятью одноразовыми автоинъекторами инсулина."
+	icon_state = "box"
+	startswith = list(/obj/item/reagent_containers/hypospray/autoinjector/pouch_auto/insulin = 5)
+
+/datum/gear/insulin_box
+	display_name = "Diseases — Diabetes Kit"
+	path = /obj/item/storage/box/diabetes
+	cost = 2
+	flags = GEAR_HAS_NO_CUSTOMIZATION
+	allowed_mod_traits = list("Disease - Diabetes")
+
+/datum/gear/insulin_pump_implanter
+	display_name = "Diseases — Insulin Pump Implanter"
+	description = "Высокотехнологичный заправленный имплантер с автоматической инсулиновой помпой."
+	path = /obj/item/implanter/insulin_pump
+	cost = 4
+	flags = GEAR_HAS_NO_CUSTOMIZATION
+	allowed_mod_traits = list("Disease - Diabetes")
+

@@ -141,3 +141,11 @@
 /datum/mod_trait/all/sweet_tooth/apply_trait(mob/living/carbon/human/H)
 	H.add_sweet_tooth_dependency()
 
+/datum/mod_trait/all/diabetes
+	name = "Disease - Diabetes"
+	description = "Вы страдаете сахарным диабетом. Вам необходимо следить за уровнем сахара в крови, избегать переедания сладкого и вовремя колоть инсулин во избежание гипергликемической комы или гипогликемического обморока."
+	incompatible_traits = list(/datum/mod_trait/all/sweet_tooth)
+
+/datum/mod_trait/all/diabetes/apply_trait(mob/living/carbon/human/H)
+	H.add_diabetes()
+
