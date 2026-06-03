@@ -484,6 +484,12 @@
 	required_reagents = list(/datum/reagent/inaprovaline = 1, /datum/reagent/hyperzine = 1, /datum/reagent/dexalinp = 1)
 	result_amount = 3
 
+/singleton/reaction/insulin
+	name = "Insulin"
+	result = /datum/reagent/insulin
+	required_reagents = list(/datum/reagent/ammonia = 1, /datum/reagent/sugar = 1, /datum/reagent/acid = 1)
+	result_amount = 3
+
 /* Solidification */
 /singleton/reaction/phoronsolidification
 	name = "Solid Phoron"

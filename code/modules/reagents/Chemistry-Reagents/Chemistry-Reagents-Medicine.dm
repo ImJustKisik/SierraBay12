@@ -1088,3 +1088,55 @@ Metabolism rate, potency, and removal designed that this only works when a conti
 					W.bleed_timer = 0
 					W.clamped = TRUE
 					E.status &= ~ORGAN_BLEEDING
+
+/datum/reagent/insulin
+	name = "Insulin"
+	description = "Инсулин регулирует уровень глюкозы в крови. Жизненно необходим диабетикам при гипергликемии."
+	taste_description = "легкая солоноватость"
+	reagent_state = LIQUID
+	color = "#f0f8ff"
+	scannable = 1
+	flags = IGNORE_MOB_SIZE
+	value = 2.0
+
+/datum/reagent/insulin/affect_blood(mob/living/carbon/M, removed)
+	if (IS_METABOLICALLY_INERT(M))
+		return
+
+	var/has_diabetes = FALSE
+	if(ishuman(M))
+		var/mob/living/carbon/human/H = M
+		for(var/datum/diabetes_controller/D in H.health_controllers)
+			has_diabetes = TRUE
+			break
+
+	if(!has_diabetes)
+		if(M.reagents)
+			for(var/datum/reagent/R in M.reagents.reagent_list)
+				if(R.sugar_amount > 0)
+					var/neutralize = min(volume, R.volume)
+					if(neutralize > 0)
+						M.reagents.remove_reagent(R.type, neutralize)
+						holder.remove_reagent(type, neutralize)
+						to_chat(M, SPAN_NOTICE("Вы чувствуете, как сладость нейтрализует действие инсулина."))
+						return
+
+		if(volume > 1)
+			M.make_jittery(2)
+			M.adjust_stamina(-2)
+		if(volume > 3)
+			M.make_jittery(5)
+			M.adjust_stamina(-4)
+			M.eye_blurry = max(M.eye_blurry, 3)
+			if(prob(8))
+				to_chat(M, SPAN_WARNING("Руки дрожат, в коленях слабость... Кажется, падает уровень сахара."))
+		if(volume > 7)
+			M.adjustOxyLoss(1.5)
+			M.drowsyness = max(M.drowsyness, 10)
+			M.adjust_stamina(-8)
+			if(prob(12))
+				M.emote("shiver")
+				to_chat(M, SPAN_DANGER("Вас бьёт сильный озноб и слабость, в глазах темнеет. Срочно нужен сахар!"))
+			if(prob(5))
+				to_chat(M, SPAN_DANGER("Вы теряете сознание от гипогликемического шока!"))
+				M.Sleeping(5)
