@@ -51,6 +51,13 @@
 	build_path = /obj/item/implantcase/explosive
 	sort_string = "MFAAG"
 
+/datum/design/item/implant/insulin_pump
+	name = "insulin pump"
+	id = "implant_insulin_pump"
+	req_tech = list(TECH_MATERIAL = 2, TECH_BIO = 3)
+	build_path = /obj/item/implantcase/insulin_pump
+	sort_string = "MFAAH"
+
 /datum/design/item/implant/implanter
 	name = "implanter"
 	id = "implanter"

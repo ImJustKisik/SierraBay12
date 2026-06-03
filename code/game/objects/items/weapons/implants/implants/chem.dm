@@ -49,3 +49,42 @@
 /obj/item/implantcase/chem
 	name = "glass case - 'chem'"
 	imp = /obj/item/implant/chem
+
+/obj/item/implant/insulin_pump
+	name = "insulin pump implant"
+	desc = "Микро-имплант, автоматически поддерживающий уровень сахара в норме путем микроинъекций инсулина."
+	origin_tech = list(TECH_MATERIAL = 2, TECH_BIO = 3)
+	var/insulin_amount = 50
+	var/max_insulin = 50
+
+/obj/item/implant/insulin_pump/get_data()
+	return {"
+	<b>Характеристики импланта:</b><BR>
+	<b>Имя:</b> Инсулиновая помпа Zeon-7<BR>
+	<b>Запас инсулина:</b> [insulin_amount]/[max_insulin] ед.<BR>
+	<b>Принцип работы:</b> Автоматически сканирует уровень сахара в крови и вводит 1 ед. инсулина, если уровень превышает 140 ед.<BR>
+	<b>Перезарядка:</b> Может быть перезаправлен инсулином с помощью шприца, пока находится в защитном кейсе.
+	"}
+
+/obj/item/implant/insulin_pump/use_tool(obj/item/I, mob/living/user, list/click_params)
+	if(istype(I, /obj/item/reagent_containers/syringe))
+		if(insulin_amount >= max_insulin)
+			to_chat(user, SPAN_WARNING("\The [src] полностью заправлена."))
+			return TRUE
+		if(!I.reagents.has_reagent(/datum/reagent/insulin))
+			to_chat(user, SPAN_WARNING("Шприц не содержит инсулина!"))
+			return TRUE
+		if(do_after(user, 0.5 SECONDS, src, DO_MEDICAL))
+			var/transferred = I.reagents.remove_reagent(/datum/reagent/insulin, min(5, max_insulin - insulin_amount))
+			insulin_amount += transferred
+			to_chat(user, SPAN_NOTICE("Вы заправили [transferred] ед. инсулина в помпу. Текущий заряд: [insulin_amount]/[max_insulin]."))
+		return TRUE
+	return ..()
+
+/obj/item/implantcase/insulin_pump
+	name = "glass case - 'insulin pump'"
+	imp = /obj/item/implant/insulin_pump
+
+/obj/item/implanter/insulin_pump
+	name = "implanter-insulin pump"
+	imp = /obj/item/implant/insulin_pump
