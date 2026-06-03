@@ -382,3 +382,196 @@
 		owner.eye_blind = INFINITY
 	owner.set_sdisability(BLINDED)
 	addtimer(new Callback(src, .proc/Enforce), 20)
+
+// ЗАВИСИМОСТИ
+/mob/living/carbon/human/proc/add_nicotine_dependency()
+	var/datum/nicotine_dependency_controller/H = new /datum/nicotine_dependency_controller(src)
+	health_controllers += H
+	H.Start()
+
+/mob/living/carbon/human/proc/add_caffeine_dependency()
+	var/datum/caffeine_dependency_controller/H = new /datum/caffeine_dependency_controller(src)
+	health_controllers += H
+	H.Start()
+
+/mob/living/carbon/human/proc/add_sweet_tooth_dependency()
+	var/datum/sweet_tooth_dependency_controller/H = new /datum/sweet_tooth_dependency_controller(src)
+	health_controllers += H
+	H.Start()
+
+
+/datum/nicotine_dependency_controller
+	var/mob/living/carbon/human/owner
+	var/running = FALSE
+	var/last_satisfied_time = 0
+	var/withdrawal_active = FALSE
+	var/next_process_time = 0
+	var/list/withdrawal_phrases = list(
+		"Вам безумно хочется сделать затяжку...",
+		"Руки немного дрожат без сигареты...",
+		"Вы чувствуете острую нехватку никотина.",
+		"Кажется, пара затяжек помогла бы успокоить нервы..."
+	)
+
+/datum/nicotine_dependency_controller/New(mob/living/carbon/human/H)
+	..()
+	owner = H
+	last_satisfied_time = world.time
+
+/datum/nicotine_dependency_controller/proc/Start()
+	if(running || !owner) return
+	running = TRUE
+	ProcessNicotine()
+
+/datum/nicotine_dependency_controller/proc/Stop()
+	running = FALSE
+
+/datum/nicotine_dependency_controller/proc/ProcessNicotine()
+	if(!running || !owner || owner.stat == DEAD) return
+
+	var/has_nicotine = FALSE
+	if(owner.reagents && owner.reagents.has_reagent(/datum/reagent/nicotine))
+		has_nicotine = TRUE
+
+	if(has_nicotine)
+		last_satisfied_time = world.time
+		if(withdrawal_active)
+			withdrawal_active = FALSE
+			to_chat(owner, SPAN_NOTICE("Вы чувствуете приятное облегчение, когда никотин попадает в кровь."))
+	else
+		var/time_passed = world.time - last_satisfied_time
+		if(time_passed >= 6 MINUTES)
+			if(!withdrawal_active)
+				withdrawal_active = TRUE
+				to_chat(owner, SPAN_WARNING("Вас начинает одолевать легкий тремор. Вам хочется курить."))
+			
+			owner.make_jittery(5)
+			if(prob(10))
+				to_chat(owner, SPAN_WARNING(pick(withdrawal_phrases)))
+				if(prob(50))
+					owner.emote("sigh")
+
+	next_process_time = world.time + 15 SECONDS
+	addtimer(new Callback(src, .proc/ProcessNicotine), 15 SECONDS)
+
+
+/datum/caffeine_dependency_controller
+	var/mob/living/carbon/human/owner
+	var/running = FALSE
+	var/last_satisfied_time = 0
+	var/withdrawal_active = FALSE
+	var/next_process_time = 0
+	var/list/withdrawal_phrases = list(
+		"Глаза слипаются, чашечка крепкого кофе сейчас бы не помешала...",
+		"Вы чувствуете острую усталость и зеваете.",
+		"Вам тяжело концентрироваться без кофеина.",
+		"Мысли путаются, хочется выпить чего-нибудь бодрящего..."
+	)
+
+/datum/caffeine_dependency_controller/New(mob/living/carbon/human/H)
+	..()
+	owner = H
+	last_satisfied_time = world.time
+
+/datum/caffeine_dependency_controller/proc/Start()
+	if(running || !owner) return
+	running = TRUE
+	ProcessCaffeine()
+
+/datum/caffeine_dependency_controller/proc/Stop()
+	running = FALSE
+
+/datum/caffeine_dependency_controller/proc/ProcessCaffeine()
+	if(!running || !owner || owner.stat == DEAD) return
+
+	var/has_caffeine = FALSE
+	if(owner.reagents)
+		var/caffeine_amount = 0
+		caffeine_amount += owner.reagents.get_reagent_amount(/datum/reagent/drink/coffee, TRUE)
+		caffeine_amount += owner.reagents.get_reagent_amount(/datum/reagent/drink/nuka_cola)
+		caffeine_amount += owner.reagents.get_reagent_amount(/datum/reagent/drink/space_cola)
+		caffeine_amount += owner.reagents.get_reagent_amount(/datum/reagent/drink/spacemountainwind)
+		caffeine_amount += owner.reagents.get_reagent_amount(/datum/reagent/drink/dr_gibb)
+		if(caffeine_amount > 0)
+			has_caffeine = TRUE
+
+	if(has_caffeine)
+		last_satisfied_time = world.time
+		if(withdrawal_active)
+			withdrawal_active = FALSE
+			to_chat(owner, SPAN_NOTICE("Приятный заряд бодрости разливается по вашему телу."))
+	else
+		var/time_passed = world.time - last_satisfied_time
+		if(time_passed >= 9 MINUTES)
+			if(!withdrawal_active)
+				withdrawal_active = TRUE
+				to_chat(owner, SPAN_WARNING("Вы начинаете чувствовать нарастающую усталость."))
+			
+			owner.drowsyness = max(owner.drowsyness, 12)
+			if(prob(10))
+				to_chat(owner, SPAN_WARNING(pick(withdrawal_phrases)))
+				if(prob(60))
+					owner.emote("yawn")
+
+	next_process_time = world.time + 15 SECONDS
+	addtimer(new Callback(src, .proc/ProcessCaffeine), 15 SECONDS)
+
+
+/datum/sweet_tooth_dependency_controller
+	var/mob/living/carbon/human/owner
+	var/running = FALSE
+	var/last_satisfied_time = 0
+	var/withdrawal_active = FALSE
+	var/next_process_time = 0
+	var/list/withdrawal_phrases = list(
+		"Вам безумно хочется съесть что-нибудь сладкое...",
+		"Настроение портится без шоколадки или конфеты...",
+		"Вы чувствуете упадок сил, хочется сладкого чая или газировки.",
+		"Мысли только о пончиках и конфетах... Живот тихонько урчит."
+	)
+
+/datum/sweet_tooth_dependency_controller/New(mob/living/carbon/human/H)
+	..()
+	owner = H
+	last_satisfied_time = world.time
+
+/datum/sweet_tooth_dependency_controller/proc/Start()
+	if(running || !owner) return
+	running = TRUE
+	ProcessSugar()
+
+/datum/sweet_tooth_dependency_controller/proc/Stop()
+	running = FALSE
+
+/datum/sweet_tooth_dependency_controller/proc/ProcessSugar()
+	if(!running || !owner || owner.stat == DEAD) return
+
+	var/has_sugar = FALSE
+	if(owner.reagents)
+		for(var/datum/reagent/R in owner.reagents.reagent_list)
+			if(R.sugar_amount > 0)
+				has_sugar = TRUE
+				break
+
+	if(has_sugar)
+		last_satisfied_time = world.time
+		if(withdrawal_active)
+			withdrawal_active = FALSE
+			to_chat(owner, SPAN_NOTICE("Вы чувствуете приятную сладость, силы возвращаются к вам!"))
+	else
+		var/time_passed = world.time - last_satisfied_time
+		if(time_passed >= 8 MINUTES)
+			if(!withdrawal_active)
+				withdrawal_active = TRUE
+				to_chat(owner, SPAN_WARNING("Вас начинает одолевать сильная тяга к сладкому. Руки слегка подрагивают."))
+			
+			owner.make_jittery(3)
+			owner.adjust_stamina(-4)
+			if(prob(10))
+				to_chat(owner, SPAN_WARNING(pick(withdrawal_phrases)))
+				if(prob(40))
+					owner.emote("sigh")
+
+	next_process_time = world.time + 15 SECONDS
+	addtimer(new Callback(src, .proc/ProcessSugar), 15 SECONDS)
+

@@ -119,3 +119,25 @@
 
 /datum/mod_trait/all/deafness/apply_trait(mob/living/carbon/human/H)
 	H.add_deafness()
+
+/datum/mod_trait/all/nicotine
+	name = "Disease - Nicotine Addiction"
+	description = "Вы испытываете физиологическую зависимость от никотина. Руки начнут дрожать, а стамина будет восстанавливаться медленнее, если долго не курить."
+
+/datum/mod_trait/all/nicotine/apply_trait(mob/living/carbon/human/H)
+	H.add_nicotine_dependency()
+
+/datum/mod_trait/all/caffeine
+	name = "Disease - Caffeine Addiction"
+	description = "Вы зависимы от кофеина. Без регулярной чашечки кофе вы будете чувствовать сонливость и слабость."
+
+/datum/mod_trait/all/caffeine/apply_trait(mob/living/carbon/human/H)
+	H.add_caffeine_dependency()
+
+/datum/mod_trait/all/sweet_tooth
+	name = "Disease - Sweet Tooth"
+	description = "Вы испытываете непреодолимую тягу к сладкому. Если вы долго не будете есть сахар, конфеты или пить газировку, ваши руки начнут дрожать, а силы будут покидать вас."
+
+/datum/mod_trait/all/sweet_tooth/apply_trait(mob/living/carbon/human/H)
+	H.add_sweet_tooth_dependency()
+

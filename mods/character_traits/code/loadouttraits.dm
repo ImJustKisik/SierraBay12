@@ -72,3 +72,52 @@
 	cost = 2
 	flags = GEAR_HAS_NO_CUSTOMIZATION
 	allowed_mod_traits = list("Disease - Headaches")
+
+// ЗАВИСИМОСТИ В ЛОАДАУТЕ
+/obj/item/storage/box/nicotine
+	name = "personal smoker's box"
+	desc = "A compact box containing a packet of cigarettes and a basic lighter. Issued to heavy smokers."
+	icon_state = "box"
+	startswith = list(
+		/obj/item/storage/fancy/smokable/luckystars = 1,
+		/obj/item/flame/lighter/random = 1
+	)
+
+/datum/gear/nicotine_box
+	display_name = "Diseases — Nicotine Kit"
+	path = /obj/item/storage/box/nicotine
+	cost = 2
+	flags = GEAR_HAS_NO_CUSTOMIZATION
+	allowed_mod_traits = list("Disease - Nicotine Addiction")
+
+/obj/item/reagent_containers/food/drinks/flask/vacuumflask/coffee
+	name = "vacuum flask (coffee)"
+	desc = "A vacuum flask pre-filled with hot coffee. Keep your coffee hot on long shifts."
+
+/obj/item/reagent_containers/food/drinks/flask/vacuumflask/coffee/Initialize()
+	. = ..()
+	reagents.add_reagent(/datum/reagent/drink/coffee, 60)
+
+/datum/gear/caffeine_flask
+	display_name = "Diseases — Caffeine Kit"
+	path = /obj/item/reagent_containers/food/drinks/flask/vacuumflask/coffee
+	cost = 2
+	flags = GEAR_HAS_NO_CUSTOMIZATION
+	allowed_mod_traits = list("Disease - Caffeine Addiction")
+
+/obj/item/storage/box/sweet_tooth
+	name = "personal sweet tooth's box"
+	desc = "A compact box containing some candies and lollipops. Issued to people with severe sugar addiction."
+	icon_state = "box"
+	startswith = list(
+		/obj/item/reagent_containers/food/snacks/candy = 3,
+		/obj/item/clothing/mask/chewable/candy/lolli = 2
+	)
+
+/datum/gear/sweet_tooth_box
+	display_name = "Diseases — Sweet Tooth Kit"
+	path = /obj/item/storage/box/sweet_tooth
+	cost = 2
+	flags = GEAR_HAS_NO_CUSTOMIZATION
+	allowed_mod_traits = list("Disease - Sweet Tooth")
+
