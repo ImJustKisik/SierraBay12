@@ -331,3 +331,100 @@
 		to_chat(usr, "The scanner now shows specific limb damage.")
 	else
 		to_chat(usr, "The scanner no longer shows limb damage.")
+
+/obj/item/device/scanner/glucometer
+	name = "glucometer"
+	desc = "Портативный прибор для быстрого измерения концентрации глюкозы в крови. Не требует использования тест-полосок."
+	icon = 'icons/obj/tools/health_analyzer.dmi'
+	icon_state = "health"
+	item_state = "analyzer"
+	w_class = ITEM_SIZE_SMALL
+	var/weakref/scanned_patient = null
+	var/last_sugar = 0
+	var/last_patient_name = ""
+	var/last_scan_time = 0
+
+/obj/item/device/scanner/glucometer/is_valid_scan_target(atom/O)
+	return istype(O, /mob/living/carbon/human)
+
+/obj/item/device/scanner/glucometer/scan(atom/A, mob/user)
+	if(istype(A, /mob/living/carbon/human))
+		var/mob/living/carbon/human/H = A
+		scanned_patient = weakref(H)
+		last_sugar = H.get_blood_sugar()
+		last_patient_name = H.name
+		last_scan_time = world.time
+		playsound(src, 'sound/effects/fastbeep.ogg', 50, 0)
+		to_chat(user, SPAN_NOTICE("Вы проводите глюкометром по коже [H.name]. Прибор издает тихий писк."))
+		ui_interact(user)
+
+/obj/item/device/scanner/glucometer/attack_self(mob/user)
+	ui_interact(user)
+
+/obj/item/device/scanner/glucometer/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 0)
+	var/list/data = list()
+	
+	var/mob/living/carbon/human/H = scanned_patient?.resolve()
+	if(H)
+		last_sugar = H.get_blood_sugar()
+		data["has_patient"] = TRUE
+		data["patient_name"] = H.name
+		data["sugar_level"] = last_sugar
+		
+		var/sugar_status = "NORMAL"
+		var/sugar_class = "good"
+		if(last_sugar > 180)
+			sugar_status = "CRITICAL HIGH (HYPERGLYCEMIA)"
+			sugar_class = "bad"
+		else if(last_sugar > 140)
+			sugar_status = "HIGH"
+			sugar_class = "average"
+		else if(last_sugar < 45)
+			sugar_status = "CRITICAL LOW (HYPOGLYCEMIA)"
+			sugar_class = "bad"
+		else if(last_sugar < 70)
+			sugar_status = "LOW"
+			sugar_class = "average"
+			
+		data["sugar_status"] = sugar_status
+		data["sugar_class"] = sugar_class
+	else if(last_patient_name)
+		data["has_patient"] = TRUE
+		data["patient_name"] = "[last_patient_name] (Cached)"
+		data["sugar_level"] = last_sugar
+		
+		var/sugar_status = "NORMAL"
+		var/sugar_class = "good"
+		if(last_sugar > 180)
+			sugar_status = "CRITICAL HIGH (HYPERGLYCEMIA)"
+			sugar_class = "bad"
+		else if(last_sugar > 140)
+			sugar_status = "HIGH"
+			sugar_class = "average"
+		else if(last_sugar < 45)
+			sugar_status = "CRITICAL LOW (HYPOGLYCEMIA)"
+			sugar_class = "bad"
+		else if(last_sugar < 70)
+			sugar_status = "LOW"
+			sugar_class = "average"
+			
+		data["sugar_status"] = sugar_status
+		data["sugar_class"] = sugar_class
+	else
+		data["has_patient"] = FALSE
+
+	ui = SSnano.try_update_ui(user, src, ui_key, ui, data, force_open)
+	if(!ui)
+		ui = new(user, src, ui_key, "glucometer.tmpl", "Glucometer", 350, 250)
+		ui.set_initial_data(data)
+		ui.open()
+		ui.set_auto_update(TRUE)
+
+/obj/item/device/scanner/glucometer/OnTopic(user, list/href_list)
+	if(href_list["clear"])
+		scanned_patient = null
+		last_sugar = 0
+		last_patient_name = ""
+		return TOPIC_REFRESH
+	return TOPIC_NOACTION
+

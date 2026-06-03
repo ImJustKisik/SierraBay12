@@ -15,6 +15,29 @@
 		return 0.0
 	return base
 
+/mob/living/carbon/human/proc/get_blood_sugar()
+	for(var/datum/diabetes_controller/D in health_controllers)
+		return D.blood_sugar
+
+	var/base_sugar = 90
+	var/sugar_amount = 0
+	var/insulin_amount = 0
+	if(reagents)
+		for(var/datum/reagent/R in reagents.reagent_list)
+			if(R.sugar_amount > 0)
+				sugar_amount += R.volume * R.sugar_amount
+			if(istype(R, /datum/reagent/insulin))
+				insulin_amount += R.volume
+
+	var/current_sugar = base_sugar
+	if(insulin_amount > 0)
+		current_sugar = max(10, current_sugar - insulin_amount * 8)
+	if(sugar_amount > 0)
+		current_sugar = min(250, current_sugar + sugar_amount * 6)
+	
+	return round(current_sugar)
+
+
 
 /mob/living/carbon/human/proc/add_asthma()
 	var/datum/asthma_controller/H = new /datum/asthma_controller(src)
@@ -628,10 +651,8 @@
 	if(!running || !owner || owner.stat == DEAD) return
 
 	// Проверка инсулиновой помпы
-	var/has_insulin_pump = FALSE
 	for(var/obj/item/implant/insulin_pump/P in owner)
 		if(P.implanted && !P.malfunction)
-			has_insulin_pump = TRUE
 			if(blood_sugar > 140 && P.insulin_amount > 0)
 				var/inject = min(P.insulin_amount, 1)
 				P.insulin_amount -= inject

@@ -1,0 +1,43 @@
+<!--
+Title: Portable Glucometer
+Used In File(s): \code\game\objects\items\devices\scanners\health.dm
+-->
+{{if data.has_patient}}
+	<div class="item">
+		<div class="itemLabel">Patient:</div>
+		<div class="itemContent"><strong>{{:data.patient_name}}</strong></div>
+	</div>
+
+	<div class="statusDisplay" style="text-align: center; padding: 15px; margin: 10px 0;">
+		<span style="font-size: 24px; font-weight: bold;" class="{{:data.sugar_class}}">
+			{{:data.sugar_level}} mg/dL
+		</span>
+		<br>
+		<span style="font-size: 11px; text-transform: uppercase;" class="{{:data.sugar_class}}">
+			{{:data.sugar_status}}
+		</span>
+	</div>
+
+	<div class="item" style="margin-top: 15px;">
+		<div class="itemContent">
+			{{:helper.link('Clear Data', 'trash', {'clear': 1})}}
+		</div>
+	</div>
+{{else}}
+	<div class="statusDisplay" style="text-align: center; padding: 25px;">
+		<span class="average" style="font-size: 14px;">NO GLUCOSE READINGS FOUND</span>
+		<br>
+		<span style="font-size: 11px; color: #888;">Please scan a patient to display blood sugar levels.</span>
+	</div>
+{{/if}}
+
+<div class="item" style="border-top: 1px solid #444; margin-top: 15px; padding-top: 10px;">
+	<span style="font-size: 10px; color: #aaa;">
+		<strong>Reference Chart (mg/dL):</strong><br>
+		<span class="bad">&lt; 45</span> Critical Low | 
+		<span class="average">45 - 70</span> Low | 
+		<span class="good">70 - 140</span> Normal | 
+		<span class="average">140 - 180</span> High | 
+		<span class="bad">&gt; 180</span> Critical High
+	</span>
+</div>

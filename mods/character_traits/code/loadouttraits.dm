@@ -127,10 +127,13 @@
 	starts_with = list(/datum/reagent/insulin = 5)
 
 /obj/item/storage/box/diabetes
-	name = "box of insulin autoinjectors"
-	desc = "Коробка с пятью одноразовыми автоинъекторами инсулина."
+	name = "diabetes kit box"
+	desc = "Коробка с пятью одноразовыми автоинъекторами инсулина и портативным глюкометром."
 	icon_state = "box"
-	startswith = list(/obj/item/reagent_containers/hypospray/autoinjector/pouch_auto/insulin = 5)
+	startswith = list(
+		/obj/item/reagent_containers/hypospray/autoinjector/pouch_auto/insulin = 5,
+		/obj/item/device/scanner/glucometer = 1
+	)
 
 /datum/gear/insulin_box
 	display_name = "Diseases — Diabetes Kit"
