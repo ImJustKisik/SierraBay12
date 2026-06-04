@@ -137,6 +137,7 @@
 /datum/mod_trait/all/sweet_tooth
 	name = "Disease - Sweet Tooth"
 	description = "Вы испытываете непреодолимую тягу к сладкому. Если вы долго не будете есть сахар, конфеты или пить газировку, ваши руки начнут дрожать, а силы будут покидать вас."
+	incompatible_traits = list(/datum/mod_trait/all/diabetes)
 
 /datum/mod_trait/all/sweet_tooth/apply_trait(mob/living/carbon/human/H)
 	H.add_sweet_tooth_dependency()

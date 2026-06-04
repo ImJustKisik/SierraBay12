@@ -50,8 +50,8 @@
 		return TRUE
 
 	else if(istype(I, /obj/item/reagent_containers/syringe))
-		if(istype(imp,/obj/item/implant/chem))
-			imp.use_tool(I,user)
+		if(istype(imp, /obj/item/implant/chem) || istype(imp, /obj/item/implant/insulin_pump))
+			imp.use_tool(I, user)
 			return TRUE
 
 	else if (istype(I, /obj/item/implanter))

@@ -361,55 +361,45 @@
 /obj/item/device/scanner/glucometer/attack_self(mob/user)
 	ui_interact(user)
 
+/obj/item/device/scanner/glucometer/proc/get_sugar_data(sugar_level)
+	var/list/result = list()
+	var/sugar_status = "NORMAL"
+	var/sugar_class = "good"
+	if(sugar_level > 180)
+		sugar_status = "CRITICAL HIGH (HYPERGLYCEMIA)"
+		sugar_class = "bad"
+	else if(sugar_level > 140)
+		sugar_status = "HIGH"
+		sugar_class = "average"
+	else if(sugar_level < 45)
+		sugar_status = "CRITICAL LOW (HYPOGLYCEMIA)"
+		sugar_class = "bad"
+	else if(sugar_level < 70)
+		sugar_status = "LOW"
+		sugar_class = "average"
+	result["sugar_status"] = sugar_status
+	result["sugar_class"] = sugar_class
+	return result
+
 /obj/item/device/scanner/glucometer/ui_interact(mob/user, ui_key = "main", datum/nanoui/ui = null, force_open = 0)
 	var/list/data = list()
 	
 	var/mob/living/carbon/human/H = scanned_patient?.resolve()
-	if(H)
+	if(H && get_dist(H, user) <= 1)
 		last_sugar = H.get_blood_sugar()
 		data["has_patient"] = TRUE
 		data["patient_name"] = H.name
 		data["sugar_level"] = last_sugar
-		
-		var/sugar_status = "NORMAL"
-		var/sugar_class = "good"
-		if(last_sugar > 180)
-			sugar_status = "CRITICAL HIGH (HYPERGLYCEMIA)"
-			sugar_class = "bad"
-		else if(last_sugar > 140)
-			sugar_status = "HIGH"
-			sugar_class = "average"
-		else if(last_sugar < 45)
-			sugar_status = "CRITICAL LOW (HYPOGLYCEMIA)"
-			sugar_class = "bad"
-		else if(last_sugar < 70)
-			sugar_status = "LOW"
-			sugar_class = "average"
-			
-		data["sugar_status"] = sugar_status
-		data["sugar_class"] = sugar_class
+		var/list/status = get_sugar_data(last_sugar)
+		data["sugar_status"] = status["sugar_status"]
+		data["sugar_class"] = status["sugar_class"]
 	else if(last_patient_name)
 		data["has_patient"] = TRUE
 		data["patient_name"] = "[last_patient_name] (Cached)"
 		data["sugar_level"] = last_sugar
-		
-		var/sugar_status = "NORMAL"
-		var/sugar_class = "good"
-		if(last_sugar > 180)
-			sugar_status = "CRITICAL HIGH (HYPERGLYCEMIA)"
-			sugar_class = "bad"
-		else if(last_sugar > 140)
-			sugar_status = "HIGH"
-			sugar_class = "average"
-		else if(last_sugar < 45)
-			sugar_status = "CRITICAL LOW (HYPOGLYCEMIA)"
-			sugar_class = "bad"
-		else if(last_sugar < 70)
-			sugar_status = "LOW"
-			sugar_class = "average"
-			
-		data["sugar_status"] = sugar_status
-		data["sugar_class"] = sugar_class
+		var/list/status = get_sugar_data(last_sugar)
+		data["sugar_status"] = status["sugar_status"]
+		data["sugar_class"] = status["sugar_class"]
 	else
 		data["has_patient"] = FALSE
 
