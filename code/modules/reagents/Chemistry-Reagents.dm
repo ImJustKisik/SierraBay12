@@ -137,6 +137,8 @@ removed = min(removed, volume)
 				affect_blood(M, effective)
 				if(QDELETED(src))
 					return
+				if(sugar_amount > 0)
+					M.on_sugar_metabolized(effective * sugar_amount)
 				if (active_metabolites && active_metabolites != type)
 					M.metabolized.add_reagent(active_metabolites, removed * metabolite_potency)
 					M.last_time_metabolite[active_metabolites] = world.time

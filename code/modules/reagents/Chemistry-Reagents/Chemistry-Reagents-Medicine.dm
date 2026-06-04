@@ -1103,6 +1103,8 @@ Metabolism rate, potency, and removal designed that this only works when a conti
 	if (IS_METABOLICALLY_INERT(M))
 		return
 
+	M.on_insulin_metabolized(removed)
+
 	var/has_diabetes = FALSE
 	if(ishuman(M))
 		var/mob/living/carbon/human/H = M
@@ -1118,25 +1120,27 @@ Metabolism rate, potency, and removal designed that this only works when a conti
 					if(neutralize > 0)
 						M.reagents.remove_reagent(R.type, neutralize)
 						holder.remove_reagent(type, neutralize)
-						to_chat(M, SPAN_NOTICE("Вы чувствуете, как сладость нейтрализует действие инсулина."))
+						to_chat(M, SPAN_NOTICE("Вы чувствуете, как инсулин нейтрализует излишек сахара в крови."))
 						return
 
-		if(volume > 1)
-			M.make_jittery(2)
-			M.adjust_stamina(-2)
-		if(volume > 3)
-			M.make_jittery(5)
-			M.adjust_stamina(-4)
-			M.eye_blurry = max(M.eye_blurry, 3)
-			if(prob(8))
-				to_chat(M, SPAN_WARNING("Руки дрожат, в коленях слабость... Кажется, падает уровень сахара."))
 		if(volume > 7)
+			M.make_jittery(5)
+			M.eye_blurry = max(M.eye_blurry, 3)
 			M.adjustOxyLoss(1.5)
 			M.drowsyness = max(M.drowsyness, 10)
-			M.adjust_stamina(-8)
+			M.adjust_stamina(-14)
 			if(prob(12))
 				M.emote("shiver")
 				to_chat(M, SPAN_DANGER("Вас бьёт сильный озноб и слабость, в глазах темнеет. Срочно нужен сахар!"))
 			if(prob(5))
 				to_chat(M, SPAN_DANGER("Вы теряете сознание от гипогликемического шока!"))
 				M.Sleeping(5)
+		else if(volume > 3)
+			M.make_jittery(5)
+			M.adjust_stamina(-6)
+			M.eye_blurry = max(M.eye_blurry, 3)
+			if(prob(8))
+				to_chat(M, SPAN_WARNING("Руки дрожат, в коленях слабость... Кажется, падает уровень сахара."))
+		else if(volume > 1)
+			M.make_jittery(2)
+			M.adjust_stamina(-2)
