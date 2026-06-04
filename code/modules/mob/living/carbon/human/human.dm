@@ -61,6 +61,9 @@
 	if (dream_timer)
 		deltimer(dream_timer)
 		dream_timer = null
+	for(var/datum/health_controller/D in health_controllers)
+		qdel(D)
+	health_controllers.Cut()
 	GLOB.human_mobs -= src
 	worn_underwear = null
 	for(var/organ in organs)
