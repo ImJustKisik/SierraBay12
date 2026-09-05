@@ -2,9 +2,8 @@
 #define CUBE_UNBLOCKED 2
 
 /obj/anomaly/labirint/proc/setup_exit_path(atom/movable/input_movable)
-	var/turf/start = get_turf(input_movable)
 	//Собираем лист турфов
-	var/list/list_of_exit_turfs = AStar(start, current_exit_cube, TYPE_PROC_REF(/turf, CardinalTurfsWithAccess), TYPE_PROC_REF(/turf, Distance), 0, 50, id = null, exclude = null) //Строим путь через алгоритм АСтар
+	var/list/list_of_exit_turfs = get_path_to(input_movable, current_exit_cube, 50)
 	//Теперь собираем кубы на пути
 	for(var/turf/turf in list_of_exit_turfs)
 		for(var/obj/anomaly/part/labirint_cube/cube in turf)

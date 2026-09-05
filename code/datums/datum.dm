@@ -1,6 +1,5 @@
 /datum
-	/// Int. `world.time` when this datum was destroyed, or `GC_CURRENTLY_BEING_QDELETED` if currently being deleted. Controlled by `qdel()`.
-	var/gc_destroyed
+	/// Int. `world.time` when this datum was destroyed, or `GC_CURRENTLY_BEING_QDELETED` if currently being deleted. Controlled by `qdel()`. Declared in `code/__defines/qdel.dm`.
 
 	/// Whether or not this datum is currently being processed, and by which subsystem. Controlled by the various `START_PROCESSING*()` and `STOP_PROCESSING*()` defines.
 	var/is_processing = FALSE

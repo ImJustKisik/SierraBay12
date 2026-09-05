@@ -64,6 +64,18 @@ var/global/const/Callback = /datum/callback
 		else
 			identity = "([target.type] \ref[target]) [callable]"
 
+/datum/callback/proc/Invoke(...)
+	var/list/arguments = list(src)
+	if(length(args))
+		arguments += args
+	return invoke(arglist(arguments))
+
+/datum/callback/proc/InvokeAsync(...)
+	var/list/arguments = list(src)
+	if(length(args))
+		arguments += args
+	return invoke_async(arglist(arguments))
+
 
 /proc/invoke(datum/callback/target, callable, ...)
 	if (target == GLOBAL_PROC)

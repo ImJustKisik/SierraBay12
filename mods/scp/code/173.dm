@@ -76,7 +76,7 @@
 				continue
 			if(!istype(L, /mob/living/carbon/human) && !istype(L, /mob/living/exosuit))
 				continue
-			if(!AStar(loc, L.loc, /turf/proc/AdjacentTurfs, /turf/proc/Distance, max_nodes=25, max_node_depth=7))
+			if(!get_path_to(src, L, 7))
 				continue // We can't reach this person anyways
 			possible_targets += L
 		if(length(possible_targets))
@@ -176,7 +176,7 @@
 					attempts--
 					var/turf/T = pick(possible_turfs)
 					possible_turfs -= T
-					if(AStar(loc, T, /turf/proc/AdjacentTurfs, /turf/proc/Distance, max_nodes=25, max_node_depth=7))
+					if(get_path_to(src, T, 7))
 						turfs += T
 						if(length(turfs) >= 5) break // We found some good spots, that's enough
 

@@ -549,6 +549,14 @@
 		return 1
 	return 0
 
+/obj/structure/window/CanPathingPass(obj/item/card/id/ID, to_dir, atom/movable/caller, no_id = FALSE)
+	if(!density)
+		return TRUE
+	if(is_fulltile() || (dir == to_dir))
+		return FALSE
+
+	return TRUE
+
 /obj/structure/window/proc/set_anchored(new_anchored)
 	if(anchored == new_anchored)
 		return

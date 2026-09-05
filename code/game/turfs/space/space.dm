@@ -11,6 +11,7 @@
 	turf_flags = TURF_DISALLOW_BLOB
 
 	z_eventually_space = TRUE
+	pathing_pass_method = TURF_PATHING_PASS_PROC
 	var/starlit = FALSE
 
 /turf/space/Initialize()

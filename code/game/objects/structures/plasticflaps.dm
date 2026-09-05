@@ -8,6 +8,7 @@
 	layer = ABOVE_HUMAN_LAYER
 	explosion_resistance = 5
 	obj_flags = OBJ_FLAG_ANCHORABLE
+	can_astar_pass = CANPATHINGPASS_ALWAYS_PROC
 
 	atmos_canpass = CANPASS_PROC
 
