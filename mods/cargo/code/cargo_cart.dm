@@ -1,96 +1,126 @@
+/proc/is_valid_cargo_cart(list/cart)
+	if(!islist(cart))
+		return FALSE
+	for(var/station_uid in cart)
+		var/list/goods = cart[station_uid]
+		if(!istext(station_uid) || !length(station_uid) || !islist(goods))
+			return FALSE
+		for(var/good_id in goods)
+			if(!istext(good_id) || !length(good_id) || !is_valid_cargo_quantity(goods[good_id]))
+				return FALSE
+	return TRUE
+
+/proc/copy_cargo_cart(list/cart)
+	var/list/result = list()
+	if(!is_valid_cargo_cart(cart))
+		return result
+	for(var/station_uid in cart)
+		var/list/goods = cart[station_uid]
+		result[station_uid] = goods.Copy()
+	return result
+
+/proc/clear_cargo_cart(list/cart)
+	if(!islist(cart))
+		return
+	for(var/station_uid in cart)
+		var/list/goods = cart[station_uid]
+		if(islist(goods))
+			goods.Cut()
+	cart.Cut()
+
+/proc/set_cargo_cart_quantity(list/cart, station_uid, good_id, amount)
+	if(!islist(cart) || !istext(station_uid) || !length(station_uid) || !istext(good_id) || !length(good_id))
+		return FALSE
+	if(amount != 0 && !is_valid_cargo_quantity(amount))
+		return FALSE
+	var/list/goods = cart[station_uid]
+	if(!islist(goods))
+		if(!amount)
+			return TRUE
+		goods = list()
+		cart[station_uid] = goods
+	if(amount)
+		goods[good_id] = amount
+	else
+		goods -= good_id
+	if(!length(goods))
+		cart -= station_uid
+	return TRUE
+
 /datum/controller/subsystem/supply/proc/ExtractCartItems(list/shop_list)
 	var/list/items = list()
-	if(!islist(shop_list))
+	if(!is_valid_cargo_cart(shop_list))
 		return items
-	var/list/merged_by_key = list()
-	for(var/station_key in shop_list)
-		var/datum/trading_station/station = ResolveStation(station_key)
-		if(!istype(station))
+	for(var/station_uid in shop_list)
+		var/datum/trading_station/station = GetStationByUid(station_uid)
+		if(!istype(station) || QDELETED(station))
 			return list()
-		var/list/sub = shop_list[station_key]
-		if(!islist(sub))
-			return list()
-		for(var/key in sub)
-			var/val = sub[key]
-			if(isnum(val))
-				if(!is_valid_cargo_quantity(val))
-					return list()
-				var/datum/trade_offer/offer = station.GetOffer(key)
-				var/cat = offer ? offer.category : null
-				var/merge_key = "[station.uid]_[key]"
-				if(merged_by_key[merge_key])
-					var/list/existing = merged_by_key[merge_key]
-					existing["count"] += round(val)
-					if(existing["count"] > 1000)
-						return list()
-				else
-					var/list/entry = list("station" = station, "good_id" = key, "cat" = cat, "count" = round(val), "offer" = offer)
-					merged_by_key[merge_key] = entry
-					items += list(entry)
-			else if(islist(val))
-				for(var/good_id in val)
-					var/cnt = val[good_id]
-					if(!isnum(cnt) || !is_valid_cargo_quantity(cnt))
-						return list()
-					var/datum/trade_offer/offer = station.GetOffer(good_id)
-					var/merge_key = "[station.uid]_[good_id]"
-					if(merged_by_key[merge_key])
-						var/list/existing = merged_by_key[merge_key]
-						existing["count"] += round(cnt)
-						if(existing["count"] > 1000)
-							return list()
-					else
-						var/list/entry = list("station" = station, "good_id" = good_id, "cat" = key, "count" = round(cnt), "offer" = offer)
-						merged_by_key[merge_key] = entry
-						items += list(entry)
-			else
+		var/list/goods = shop_list[station_uid]
+		for(var/good_id in goods)
+			var/datum/trade_offer/offer = station.GetOffer(good_id)
+			if(!istype(offer) || QDELETED(offer))
 				return list()
+			items.Add(list(list("station" = station, "good_id" = good_id, "cat" = offer.category, "count" = goods[good_id], "offer" = offer)))
 	return items
 
 /datum/controller/subsystem/supply/proc/CollectCountsFrom(list/shop_list)
 	. = 0
-	if(!islist(shop_list))
-		return
 	for(var/list/item as anything in ExtractCartItems(shop_list))
 		. += item["count"]
 
 /datum/controller/subsystem/supply/proc/CollectPriceForList(list/shop_list, buyer_faction = null)
 	. = 0
-	if(!islist(shop_list))
-		return
 	for(var/list/item as anything in ExtractCartItems(shop_list))
-		var/datum/trading_station/station = item["station"]
-		var/gid = item["good_id"]
-		var/cat = item["cat"]
-		var/count = item["count"]
-		. += GetImportCost(gid, station, buyer_faction, cat) * count
+		. += GetImportCost(item["good_id"], item["station"], buyer_faction, item["cat"]) * item["count"]
 
 /datum/controller/subsystem/supply/proc/ClearShopList(list/target_list)
-	if(!islist(target_list))
-		return
-	for(var/station_key in target_list)
-		var/list/sub = target_list[station_key]
-		if(islist(sub))
-			for(var/entry in sub)
-				var/list/inner = sub[entry]
-				if(islist(inner))
-					inner.Cut()
-			sub.Cut()
-	target_list.Cut()
+	clear_cargo_cart(target_list)
 
-/datum/controller/subsystem/supply/proc/ClearMarketSnapshot(list/snapshot)
+/proc/is_valid_cargo_quote(list/snapshot)
+	if(!islist(snapshot))
+		return FALSE
+	for(var/station_uid in snapshot)
+		var/list/goods = snapshot[station_uid]
+		if(!istext(station_uid) || !length(station_uid) || !islist(goods))
+			return FALSE
+		for(var/good_id in goods)
+			var/list/packet = goods[good_id]
+			if(!istext(good_id) || !length(good_id) || !is_valid_cargo_quote_packet(packet))
+				return FALSE
+	return TRUE
+
+/proc/is_valid_cargo_quote_packet(list/packet)
+	if(!islist(packet) || length(packet) != 3 || !is_valid_cargo_quantity(packet["amount"]))
+		return FALSE
+	var/unit_price = packet["unit_price"]
+	var/timestamp = packet["timestamp"]
+	return isnum(unit_price) && !isnan(unit_price) && unit_price >= 1 && unit_price < INFINITY && isnum(timestamp) && !isnan(timestamp) && timestamp >= 0 && timestamp < INFINITY
+
+/proc/clear_cargo_station_quote(list/goods)
+	if(!islist(goods))
+		return
+	for(var/good_id in goods)
+		var/list/packet = goods[good_id]
+		if(islist(packet))
+			packet.Cut()
+	goods.Cut()
+
+/proc/clear_cargo_quote(list/snapshot)
 	if(!islist(snapshot))
 		return
-	for(var/datum/trading_station/station as anything in snapshot)
-		var/list/station_snap = snapshot[station]
-		if(islist(station_snap))
-			for(var/category_name in station_snap)
-				var/list/category_snap = station_snap[category_name]
-				if(islist(category_snap))
-					for(var/good_id in category_snap)
-						var/list/good_snap = category_snap[good_id]
-						if(islist(good_snap))
-							good_snap.Cut()
-					category_snap.Cut()
-			station_snap.Cut()
+	for(var/station_uid in snapshot)
+		clear_cargo_station_quote(snapshot[station_uid])
 	snapshot.Cut()
+
+/datum/controller/subsystem/supply/proc/ClearMarketSnapshot(list/snapshot)
+	clear_cargo_quote(snapshot)
+
+/datum/controller/subsystem/supply/proc/GetCartTotals(list/cart, buyer_faction = null)
+	var/count = 0
+	var/price = 0
+	for(var/list/item as anything in ExtractCartItems(cart))
+		count += item["count"]
+		price += GetImportCost(item["good_id"], item["station"], buyer_faction, item["cat"]) * item["count"]
+	var/subtotal = round(price, 0.01)
+	var/fee = round(subtotal * handling_fee, 0.01)
+	return list("count" = count, "subtotal" = subtotal, "fee" = fee, "total" = subtotal + fee)

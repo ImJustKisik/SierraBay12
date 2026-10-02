@@ -172,7 +172,7 @@
 	if(account.money < totals["total"])
 		return "Insufficient account balance to cover items and handling fee."
 	for(var/station_key in shopping_list)
-		var/datum/trading_station/target_station = SSsupply.ResolveStation(station_key)
+		var/datum/trading_station/target_station = SSsupply.GetStationByUid(station_key)
 		if(!istype(target_station) || QDELETED(target_station))
 			return "One of the stations in your cart is no longer available."
 		var/station_block = GetStationTradeBlockReason(target_station)

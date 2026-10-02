@@ -10,6 +10,7 @@
 /datum/unit_test/cargo_trade_ui_default_selection_test/start_test()
 	var/datum/computer_file/program/supply/program = new
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	var/list/original_visible_stations = SSsupply.visible_trading_stations
 	var/fail_reason = null
 
@@ -38,6 +39,7 @@
 /datum/unit_test/cargo_trade_ui_block_reason_test/start_test()
 	var/datum/computer_file/program/supply/program = new
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	var/fail_reason = null
 
 	station.whitelist_factions = list(FACTION_NANOTRASEN)
@@ -98,6 +100,7 @@
 		return 1
 
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	station.AssembleInventory()
 	station.whitelist_factions = list()
 	station.blacklist_factions = list()
@@ -129,20 +132,17 @@
 /datum/unit_test/cargo_trade_ui_cart_serialization_test/start_test()
 	var/datum/computer_file/program/supply/program = new
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	var/fail_reason = null
 
 	station.AssembleInventory()
-	var/alpha_offer = station.inventory["Alpha"][1]
-	var/beta_offer = station.inventory["Beta"][1]
-	var/list/alpha_goods = list()
-	var/list/beta_goods = list()
-	alpha_goods[alpha_offer] = 2
-	beta_goods[beta_offer] = 1
+	var/alpha_offer = station.offers_by_category["Alpha"][1]
+	var/beta_offer = station.offers_by_category["Beta"][1]
 	program.shopping_list = list()
-	program.shopping_list[station] = list(
-		"Alpha" = alpha_goods,
-		"Beta" = beta_goods
-	)
+	program.shopping_list[station.uid] = list()
+	var/list/cart_goods = program.shopping_list[station.uid]
+	cart_goods[alpha_offer] = 2
+	cart_goods[beta_offer] = 1
 
 	var/list/groups = program.SerializeShopListGroups(program.shopping_list, FACTION_INDEPENDENT)
 	if(length(groups) != 1)
@@ -214,7 +214,9 @@
 /datum/unit_test/cargo_trade_ui_available_stations_filter_test/start_test()
 	var/datum/computer_file/program/supply/program = new
 	var/datum/trading_station/unit_test_duplicate_pricing/station_in_range = new
+	RegisterCargoTestStation(station_in_range)
 	var/datum/trading_station/unit_test_duplicate_pricing/station_blocked = new
+	RegisterCargoTestStation(station_blocked)
 	var/list/original_visible_stations = SSsupply.visible_trading_stations
 	var/fail_reason = null
 
@@ -271,11 +273,12 @@
 /datum/unit_test/cargo_supply_order_program_test/start_test()
 	var/datum/computer_file/program/supply_order/program = new
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	var/fail_reason = null
 
 	station.AssembleInventory()
 	station.InitGoods()
-	var/alpha_offer = station.inventory["Alpha"][1]
+	var/alpha_offer = station.offers_by_category["Alpha"][1]
 	program.station = station
 	program.chosen_category = "Alpha"
 	program.TryAddToCart(alpha_offer, 3)

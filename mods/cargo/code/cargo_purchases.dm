@@ -11,6 +11,8 @@
 	return offer
 
 /datum/controller/subsystem/supply/proc/ValidateCartItems(obj/machinery/trade_beacon/receiving/beacon, list/items, buyer_faction, list/price_snapshot)
+	if(!isnull(price_snapshot) && !is_valid_cargo_quote(price_snapshot))
+		return null
 	var/total_price = 0
 	var/packable = 0
 	for(var/list/data as anything in items)

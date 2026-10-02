@@ -44,43 +44,14 @@ GLOBAL_LIST_EMPTY(cargo_item_icon_cache)
 /datum/computer_file/program/supply_base/proc/GetStationKey(station_ref = station)
 	if(istype(station_ref, /datum/trading_station))
 		var/datum/trading_station/target_station = station_ref
-		return target_station.uid || "[target_station.type]"
-	if(istext(station_ref))
-		return station_ref
-	return null
+		return target_station.uid
+	return istext(station_ref) ? station_ref : null
 
 /datum/computer_file/program/supply_base/proc/ClearShopList(list/target_list)
-	if(!islist(target_list))
-		return
-	for(var/station_key in target_list)
-		var/list/sub = target_list[station_key]
-		if(islist(sub))
-			for(var/entry in sub)
-				var/list/inner = sub[entry]
-				if(islist(inner))
-					inner.Cut()
-			sub.Cut()
-	target_list.Cut()
+	clear_cargo_cart(target_list)
 
 /datum/computer_file/program/supply_base/proc/CopyShopList(list/source)
-	var/list/copied = list()
-	if(!islist(source))
-		return copied
-	for(var/station_key in source)
-		var/list/sub = source[station_key]
-		if(!islist(sub))
-			continue
-		var/list/sub_copy = list()
-		for(var/key in sub)
-			var/val = sub[key]
-			if(islist(val))
-				var/list/val_list = val
-				sub_copy[key] = val_list.Copy()
-			else
-				sub_copy[key] = val
-		var/target_key = istype(station_key, /datum/trading_station) ? GetStationKey(station_key) : station_key
-		copied[target_key] = sub_copy
-	return copied
+	return copy_cargo_cart(source)
 
 /datum/computer_file/program/supply_base/proc/OpenShopList(station_ref = station, target_category = chosen_category)
 	var/station_key = GetStationKey(station_ref)
@@ -92,112 +63,50 @@ GLOBAL_LIST_EMPTY(cargo_item_icon_cache)
 
 /datum/computer_file/program/supply_base/proc/GetShopList(station_ref = station, target_category = chosen_category)
 	var/station_key = GetStationKey(station_ref)
-	if(!station_key || !islist(shopping_list))
-		return null
-	var/list/cart = shopping_list[station_key] || (istype(station_ref, /datum/trading_station) ? shopping_list[station_ref] : null)
-	if(!islist(cart))
-		return null
-	if(target_category && islist(cart[target_category]))
-		return cart[target_category]
-	return cart
+	return station_key && islist(shopping_list) ? shopping_list[station_key] : null
 
 /datum/computer_file/program/supply_base/proc/SanitizeShopList()
 	if(!islist(shopping_list))
 		return
-	for(var/station_key in shopping_list.Copy())
-		var/datum/trading_station/target_station = SSsupply ? SSsupply.ResolveStation(station_key) : null
-		if(!istype(target_station) || QDELETED(target_station))
-			shopping_list -= station_key
+	for(var/station_uid in shopping_list.Copy())
+		var/datum/trading_station/target_station = istext(station_uid) ? SSsupply.GetStationByUid(station_uid) : null
+		var/list/goods = shopping_list[station_uid]
+		if(!istype(target_station) || QDELETED(target_station) || !islist(goods))
+			shopping_list -= station_uid
 			continue
-		var/list/cart = shopping_list[station_key]
-		if(!islist(cart))
-			shopping_list -= station_key
-			continue
-		for(var/item_key in cart.Copy())
-			var/val = cart[item_key]
-			if(isnum(val))
-				var/datum/trade_offer/offer = target_station.GetOffer(item_key)
-				if(val < 1 || !offer || (offer.hidden && !target_station.hidden_inv_unlocked))
-					cart -= item_key
-			else if(islist(val))
-				var/list/val_list = val
-				var/category_name = item_key
-				var/list/cat_offers = islist(target_station.offers_by_category) ? target_station.offers_by_category[category_name] : null
-				var/list/cat_inv = islist(target_station.inventory) ? target_station.inventory[category_name] : null
-				if(!islist(cat_offers) && !islist(cat_inv))
-					cart -= item_key
-					continue
-				for(var/g_id in val_list.Copy())
-					var/datum/trade_offer/offer = target_station.GetOffer(g_id)
-					var/valid_item = FALSE
-					if(offer)
-						if(!offer.hidden || target_station.hidden_inv_unlocked)
-							if(offer.category == category_name || (islist(cat_offers) && (offer.id in cat_offers)))
-								valid_item = TRUE
-					else if(islist(cat_inv) && (g_id in cat_inv))
-						if(target_station.hidden_inv_unlocked || !islist(target_station.hidden_inventory) || !islist(target_station.hidden_inventory[category_name]) || !(g_id in target_station.hidden_inventory[category_name]))
-							valid_item = TRUE
-					if(val_list[g_id] < 1 || !valid_item)
-						val_list -= g_id
-				if(!length(val_list))
-					cart -= item_key
-		if(!length(cart))
-			shopping_list -= station_key
+		for(var/good_id in goods.Copy())
+			if(!istext(good_id) || !is_valid_cargo_quantity(goods[good_id]) || !target_station.GetOffer(good_id))
+				goods -= good_id
+		if(!length(goods))
+			shopping_list -= station_uid
 
 /datum/computer_file/program/supply_base/proc/AddToShopList(good_id, amount, limit, station_ref = station)
-	if(!good_id || !isnum(amount) || isnan(amount) || amount <= 0)
+	if(!is_valid_cargo_quantity(amount) || (isnum(limit) && limit <= 0))
 		return
 	var/station_key = GetStationKey(station_ref)
-	if(!station_key)
-		return
-	if(!islist(shopping_list[station_key]))
-		shopping_list[station_key] = list()
-	var/list/cart = shopping_list[station_key]
-	var/target_amount = (cart[good_id] || 0) + round(amount)
-	if(limit && target_amount > limit)
-		target_amount = limit
-	cart[good_id] = target_amount
+	var/list/goods = GetShopList(station_ref)
+	var/target_amount = min(1000, (goods?[good_id] || 0) + amount)
+	if(isnum(limit))
+		target_amount = min(target_amount, limit)
+	set_cargo_cart_quantity(shopping_list, station_key, good_id, target_amount)
 
 /datum/computer_file/program/supply_base/proc/RemoveFromShopList(good_id, amount, station_ref = station, target_category = chosen_category)
-	if(!good_id || !isnum(amount) || isnan(amount) || amount <= 0)
+	if(!isnum(amount) || isnan(amount) || amount <= 0)
 		return
-	var/station_key = GetStationKey(station_ref)
-	if(!station_key)
-		return
-	var/list/cart = shopping_list[station_key]
-	if(islist(cart) && (good_id in cart))
-		cart[good_id] -= round(amount)
-		if(cart[good_id] < 1)
-			cart -= good_id
-		if(!length(cart))
-			shopping_list -= station_key
-	else if(istype(station_ref, /datum/trading_station) && islist(shopping_list[station_ref]))
-		var/list/leg_cats = shopping_list[station_ref]
-		if(target_category && islist(leg_cats[target_category]))
-			var/list/leg_goods = leg_cats[target_category]
-			if(good_id in leg_goods)
-				leg_goods[good_id] -= round(amount)
-				if(leg_goods[good_id] < 1)
-					leg_goods -= good_id
+	var/list/goods = GetShopList(station_ref)
+	set_cargo_cart_quantity(shopping_list, GetStationKey(station_ref), good_id, max(0, (goods?[good_id] || 0) - round(amount)))
 	SanitizeShopList()
 
 /datum/computer_file/program/supply_base/proc/SetInShopList(good_id, amount, limit, station_ref = station, target_category = chosen_category)
-	if(!good_id || !isnum(amount) || isnan(amount))
+	if(!isnum(amount) || isnan(amount))
 		return
 	if(amount <= 0 || (isnum(limit) && limit <= 0))
 		RemoveFromShopList(good_id, 999999, station_ref, target_category)
 		return
-	var/station_key = GetStationKey(station_ref)
-	if(!station_key)
+	if(!is_valid_cargo_quantity(amount))
 		return
-	if(!islist(shopping_list[station_key]))
-		shopping_list[station_key] = list()
-	var/list/cart = shopping_list[station_key]
-	var/target_amount = round(amount)
-	if(isnum(limit) && target_amount > limit)
-		target_amount = limit
-	target_amount = clamp(target_amount, 1, 1000)
-	cart[good_id] = target_amount
+	var/target_amount = isnum(limit) ? min(amount, limit) : amount
+	set_cargo_cart_quantity(shopping_list, GetStationKey(station_ref), good_id, target_amount)
 
 /datum/computer_file/program/supply_base/proc/ResetShopList()
 	if(shopping_list)
@@ -281,7 +190,7 @@ GLOBAL_LIST_EMPTY(cargo_item_icon_cache)
 	if(!istype(station) || !(station in available_stations))
 		station = available_stations[1]
 
-	if(!chosen_category || !(chosen_category in station.inventory))
+	if(!chosen_category || !(chosen_category in station.offers_by_category))
 		SetChosenCategory()
 
 	OnStationSelected(station)
@@ -291,17 +200,17 @@ GLOBAL_LIST_EMPTY(cargo_item_icon_cache)
 	if(!istype(station))
 		chosen_category = null
 		return
-	if(value && (value in station.inventory))
+	if(value && (value in station.offers_by_category))
 		chosen_category = value
 		return
 	var/index = isnum(value) ? value : (istext(value) ? text2num(value) : null)
 	if(isnum(index))
 		index = round(index)
-		if(index >= 1 && index <= length(station.inventory))
-			chosen_category = station.inventory[index]
+		if(index >= 1 && index <= length(station.offers_by_category))
+			chosen_category = station.offers_by_category[index]
 			return
-	if(length(station.inventory))
-		chosen_category = station.inventory[1]
+	if(length(station.offers_by_category))
+		chosen_category = station.offers_by_category[1]
 	else
 		chosen_category = null
 
@@ -310,7 +219,7 @@ GLOBAL_LIST_EMPTY(cargo_item_icon_cache)
 		return null
 	if(!category_name)
 		category_name = chosen_category
-	var/list/category = station.inventory[category_name]
+	var/list/category = station.offers_by_category[category_name]
 	if(!islist(category) || !good_ref)
 		return null
 	if(good_ref in category)

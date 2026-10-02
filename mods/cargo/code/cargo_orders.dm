@@ -31,50 +31,19 @@
 			UpdatePurgedOrder(order, order_id)
 
 /datum/controller/subsystem/supply/proc/PurgeStationFromOrderContents(list/contents, datum/trading_station/station, st_uid)
-	if(!islist(contents))
+	if(!islist(contents) || !(st_uid in contents))
 		return FALSE
-	var/changed = FALSE
-	var/list/station_keys = list()
-	if(station in contents)
-		station_keys += station
-	if(st_uid && (st_uid in contents))
-		station_keys += st_uid
-	for(var/station_key in station_keys)
-		var/list/station_cart = contents[station_key]
-		if(islist(station_cart))
-			for(var/entry in station_cart)
-				var/list/inner = station_cart[entry]
-				if(islist(inner))
-					inner.Cut()
-			station_cart.Cut()
-		contents -= station_key
-		changed = TRUE
-	return changed
+	var/list/goods = contents[st_uid]
+	goods?.Cut()
+	contents -= st_uid
+	return TRUE
 
 /datum/controller/subsystem/supply/proc/PurgeStationFromOrderSnapshot(list/price_snapshot, datum/trading_station/station, st_uid)
-	if(!islist(price_snapshot))
+	if(!islist(price_snapshot) || !(st_uid in price_snapshot))
 		return FALSE
-	var/changed = FALSE
-	var/list/snap_keys = list()
-	if(station in price_snapshot)
-		snap_keys += station
-	if(st_uid && (st_uid in price_snapshot))
-		snap_keys += st_uid
-	for(var/snap_key in snap_keys)
-		var/list/station_snap = price_snapshot[snap_key]
-		if(islist(station_snap))
-			for(var/cat in station_snap)
-				var/list/cat_snap = station_snap[cat]
-				if(islist(cat_snap))
-					for(var/gid in cat_snap)
-						var/list/gsnap = cat_snap[gid]
-						if(islist(gsnap))
-							gsnap.Cut()
-					cat_snap.Cut()
-			station_snap.Cut()
-		price_snapshot -= snap_key
-		changed = TRUE
-	return changed
+	clear_cargo_station_quote(price_snapshot[st_uid])
+	price_snapshot -= st_uid
+	return TRUE
 
 /datum/controller/subsystem/supply/proc/UpdatePurgedOrder(list/order, order_id)
 	var/list/contents = order["contents"]

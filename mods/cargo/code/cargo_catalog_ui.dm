@@ -95,7 +95,7 @@
 		target_station = station
 	if(!istype(target_station))
 		return result
-	for(var/category_name in target_station.inventory)
+	for(var/category_name in target_station.offers_by_category)
 		result.Add(list(list(
 			"name" = category_name,
 			"icon" = GetCategoryIcon(category_name),
@@ -109,13 +109,13 @@
 		target_station = station
 	if(!istype(target_station) || !chosen_category)
 		return result
-	var/list/category = target_station.inventory[chosen_category]
+	var/list/category = target_station.offers_by_category[chosen_category]
 	if(!islist(category) || GetStationTradeBlockReason(target_station))
 		return result
 
 	var/can_add_goods = CanAddGoodsToCart()
-	var/station_key = target_station.uid || "[target_station.type]"
-	var/list/station_cart = islist(shopping_list[station_key]) ? shopping_list[station_key] : (islist(shopping_list[target_station]) ? shopping_list[target_station] : null)
+	var/station_key = target_station.uid
+	var/list/station_cart = shopping_list[station_key]
 	var/list/assets_to_send = list()
 	for(var/good_id in category)
 		var/list/entry = SerializeGoodEntry(target_station, good_id, station_cart, can_add_goods, assets_to_send)
@@ -127,11 +127,11 @@
 
 /datum/computer_file/program/supply_base/proc/SerializeGoodEntry(datum/trading_station/target_station, good_id, list/station_cart, can_add_goods, list/assets_to_send)
 	var/datum/trade_offer/offer = target_station.GetOffer(good_id)
-	var/path = offer ? offer.item_path : target_station.GetGoodPath(chosen_category, good_id)
-	if(!ispath(path, /atom/movable))
+	if(!offer || !ispath(offer.item_path, /atom/movable))
 		return null
-	var/stock = offer ? offer.stock : target_station.GetGoodAmount(chosen_category, good_id)
-	var/basic_price = offer ? offer.base_price : SSsupply.GetStationTradeBasePrice(good_id, target_station, faction, chosen_category)
+	var/path = offer.item_path
+	var/stock = offer.stock
+	var/basic_price = offer.base_price
 	var/price = SSsupply.GetStationBuyPrice(good_id, target_station, faction, chosen_category)
 	var/sell_price = SSsupply.GetStationSellPrice(good_id, target_station, faction, chosen_category)
 	var/in_cart = GetGoodCartQuantity(station_cart, good_id)
@@ -141,7 +141,7 @@
 		assets_to_send |= icon_asset
 	return list(
 		"id" = good_id,
-		"name" = offer ? offer.name : target_station.GetGoodName(chosen_category, good_id),
+		"name" = offer.name,
 		"desc" = initial(item_type.desc) || "",
 		"stock" = stock,
 		"price" = round(price, 0.01),
@@ -154,23 +154,17 @@
 	)
 
 /datum/computer_file/program/supply_base/proc/GetGoodCartQuantity(list/station_cart, good_id)
-	if(!islist(station_cart))
-		return 0
-	if(isnum(station_cart[good_id]))
-		return station_cart[good_id]
-	if(islist(station_cart[chosen_category]))
-		return station_cart[chosen_category][good_id] || 0
-	return 0
+	return islist(station_cart) ? (station_cart[good_id] || 0) : 0
 
 /datum/computer_file/program/supply_base/proc/SerializeShopListGroups(list/shop_list, buyer_faction = null, list/price_snapshot = null)
 	var/list/result = list()
-	if(!islist(shop_list))
+	if(!is_valid_cargo_cart(shop_list) || (!isnull(price_snapshot) && !is_valid_cargo_quote(price_snapshot)))
 		return result
 	if(isnull(buyer_faction))
 		buyer_faction = faction
 
 	for(var/station_key in shop_list)
-		var/datum/trading_station/target_station = SSsupply ? SSsupply.ResolveStation(station_key) : null
+		var/datum/trading_station/target_station = SSsupply ? SSsupply.GetStationByUid(station_key) : null
 		if(!istype(target_station))
 			continue
 		var/list/cart = shop_list[station_key]
@@ -189,17 +183,16 @@
 
 /datum/computer_file/program/supply_base/proc/GroupCartEntriesByCategory(list/cart, datum/trading_station/target_station)
 	var/list/grouped = list()
-	for(var/key in cart)
-		var/val = cart[key]
-		if(islist(val))
-			grouped[key] = val
-		else if(isnum(val) && val > 0)
-			var/datum/trade_offer/offer = target_station.GetOffer(key)
-			var/cat_name = offer ? (offer.category || "General") : "General"
-			if(!islist(grouped[cat_name]))
-				grouped[cat_name] = list()
-			var/list/cat_items = grouped[cat_name]
-			cat_items[key] = val
+	for(var/good_id in cart)
+		var/datum/trade_offer/offer = istext(good_id) ? target_station.GetOffer(good_id) : null
+		if(!offer || !is_valid_cargo_quantity(cart[good_id]))
+			continue
+		var/category_name = offer.category
+		var/list/goods = grouped[category_name]
+		if(!islist(goods))
+			goods = list()
+			grouped[category_name] = goods
+		goods[good_id] = cart[good_id]
 	return grouped
 
 /datum/computer_file/program/supply_base/proc/SerializeCategoryEntries(list/categories, datum/trading_station/target_station, buyer_faction, list/price_snapshot)
@@ -213,11 +206,9 @@
 			var/amount = goods[good_id]
 			if(!isnum(amount) || amount < 1)
 				continue
-			var/unit_price = SSsupply.GetStationBuyPrice(good_id, target_station, buyer_faction, category_name)
-			if(islist(price_snapshot))
-				var/snapshot_price = SSsupply.GetSnapshotUnitPrice(price_snapshot, target_station, category_name, good_id)
-				if(isnum(snapshot_price))
-					unit_price = snapshot_price
+			var/unit_price = islist(price_snapshot) ? SSsupply.GetSnapshotUnitPrice(price_snapshot, target_station, category_name, good_id) : SSsupply.GetStationBuyPrice(good_id, target_station, buyer_faction, category_name)
+			if(!isnum(unit_price))
+				continue
 			item_entries.Add(list(list(
 				"good_id" = good_id,
 				"name" = target_station.GetGoodName(category_name, good_id),

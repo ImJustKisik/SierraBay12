@@ -37,7 +37,7 @@
 		fail("No trade stations were initialized.")
 		return 1
 	for(var/datum/trading_station/trading_station as anything in SSsupply.all_trading_stations)
-		if(!trading_station.name || !length(trading_station.inventory))
+		if(!trading_station.name || !length(trading_station.offers_by_category))
 			fail("[trading_station.type] did not initialize correctly.")
 			return 1
 	pass("Trade stations initialized with inventory.")
@@ -64,7 +64,7 @@
 		if(!istype(trading_station))
 			fail("Trading station [station_uid] was not initialized.")
 			return 1
-		if(!length(trading_station.inventory) && !length(trading_station.hidden_inventory))
+		if(!length(trading_station.offers_by_category) && !length(trading_station.hidden_offers))
 			fail("Trading station [station_uid] has no inventory.")
 			return 1
 	pass("Native stations initialized with catalog contents.")
@@ -79,8 +79,8 @@
 		fail("Medicine station was not initialized.")
 		return 1
 
-	for(var/cat_name in med_station.inventory)
-		var/list/goods = med_station.inventory[cat_name]
+	for(var/cat_name in med_station.offers_by_category)
+		var/list/goods = med_station.offers_by_category[cat_name]
 		if(!islist(goods))
 			continue
 		for(var/good_id in goods)
@@ -98,8 +98,8 @@
 		fail("Service station was not initialized.")
 		return 1
 
-	for(var/cat_name in service_station.inventory)
-		var/list/goods = service_station.inventory[cat_name]
+	for(var/cat_name in service_station.offers_by_category)
+		var/list/goods = service_station.offers_by_category[cat_name]
 		if(!islist(goods))
 			continue
 		for(var/good_id in goods)
@@ -117,8 +117,8 @@
 		fail("Security station was not initialized.")
 		return 1
 
-	for(var/cat_name in sec_station.inventory)
-		var/list/goods = sec_station.inventory[cat_name]
+	for(var/cat_name in sec_station.offers_by_category)
+		var/list/goods = sec_station.offers_by_category[cat_name]
 		if(!islist(goods))
 			continue
 		for(var/good_id in goods)
@@ -147,7 +147,6 @@
 		"Beta" = list(/obj/item/pen = GOODS_DATA("Beta Pen", null, 20))
 	)
 	hidden_inventory = list()
-	amounts_of_goods = list()
 	unique_good_count = 0
 	next_good_offer_id = 0
 	NormalizeGoodsRecords()
@@ -157,10 +156,11 @@
 
 /datum/unit_test/cargo_duplicate_offer_price_test/start_test()
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	station.AssembleInventory()
 
-	var/alpha_offer = station.inventory["Alpha"][1]
-	var/beta_offer = station.inventory["Beta"][1]
+	var/alpha_offer = station.offers_by_category["Alpha"][1]
+	var/beta_offer = station.offers_by_category["Beta"][1]
 	if(!alpha_offer || !beta_offer)
 		fail("Failed to create duplicate-offer test inventory.")
 		return 1
@@ -168,15 +168,10 @@
 	var/alpha_price = SSsupply.GetBasicImportCost(alpha_offer, station, "Alpha")
 	var/beta_price = SSsupply.GetBasicImportCost(beta_offer, station, "Beta")
 	var/list/shop_list = list()
-	var/list/categories = list(
-		"Alpha" = list(),
-		"Beta" = list()
-	)
-	shop_list[station] = categories
-	var/list/alpha_goods = categories["Alpha"]
-	var/list/beta_goods = categories["Beta"]
-	alpha_goods[alpha_offer] = 1
-	beta_goods[beta_offer] = 1
+	var/list/goods = list()
+	shop_list[station.uid] = goods
+	goods[alpha_offer] = 1
+	goods[beta_offer] = 1
 	var/total_price = SSsupply.CollectPriceForList(shop_list, FACTION_INDEPENDENT)
 
 	if(alpha_price != 10)
@@ -196,10 +191,11 @@
 
 /datum/unit_test/cargo_buy_revalidates_stock_test/start_test()
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	station.AssembleInventory()
 	station.InitGoods()
 
-	var/good_id = station.inventory["Alpha"][1]
+	var/good_id = station.offers_by_category["Alpha"][1]
 	if(!good_id)
 		fail("Failed to create stock-validation test inventory.")
 		return 1
@@ -212,9 +208,8 @@
 
 	var/obj/machinery/trade_beacon/receiving/beacon = new(get_safe_turf())
 	var/list/shop_list = list()
-	var/list/categories = list("Alpha" = list())
-	shop_list[station] = categories
-	var/list/alpha_goods = categories["Alpha"]
+	var/list/alpha_goods = list()
+	shop_list[station.uid] = alpha_goods
 	alpha_goods[good_id] = 2
 
 	if(SSsupply.Buy(beacon, account, shop_list, FALSE, null, FACTION_INDEPENDENT))
@@ -242,7 +237,9 @@
 		return 1
 
 	var/datum/trading_station/unit_test_duplicate_pricing/anchor_station = new
+	RegisterCargoTestStation(anchor_station)
 	var/datum/trading_station/unit_test_duplicate_pricing/test_station = new
+	RegisterCargoTestStation(test_station)
 	test_station.min_overmap_station_spacing = 5
 	test_station.preferred_distance_from_base = 8
 	test_station.max_distance_from_base = 20
@@ -304,6 +301,7 @@
 		return 1
 
 	var/datum/trading_station/unit_test_duplicate_pricing/test_station = new
+	RegisterCargoTestStation(test_station)
 	test_station.hazard_buffer = 1
 
 	var/turf/hazard_turf = null
@@ -554,6 +552,7 @@
 	var/obj/machinery/trade_beacon/sending/beacon = new(safe_turf)
 	var/datum/money_account/seller_account = new
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	station.AssembleInventory()
 	station.wealth = 10000
 	var/obj/structure/closet/crate/crate = new(safe_turf)
@@ -609,16 +608,17 @@
 	all_money_accounts += customer_account
 
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	station.AssembleInventory()
 	station.InitGoods()
-	var/good_id = station.inventory["Alpha"][1]
+	var/good_id = station.offers_by_category["Alpha"][1]
 	station.SetGoodAmount("Alpha", good_id, 5)
 
 	var/obj/machinery/trade_beacon/receiving/beacon = new(safe_turf)
 	var/list/shop_list = list()
 	var/list/goods = list()
 	goods[good_id] = 1
-	shop_list[station] = list("Alpha" = goods)
+	shop_list[station.uid] = goods
 
 	var/order_id = SSsupply.BuildOrder(customer_account, "Personal tool", shop_list, FACTION_INDEPENDENT)
 	var/list/order_data = SSsupply.order_queue[order_id]
@@ -677,16 +677,17 @@
 	all_money_accounts += customer_account
 
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	station.AssembleInventory()
 	station.InitGoods()
-	var/good_id = station.inventory["Alpha"][1]
+	var/good_id = station.offers_by_category["Alpha"][1]
 	station.SetGoodAmount("Alpha", good_id, 0)
 
 	var/obj/machinery/trade_beacon/receiving/beacon = new(safe_turf)
 	var/list/shop_list = list()
 	var/list/goods = list()
 	goods[good_id] = 1
-	shop_list[station] = list("Alpha" = goods)
+	shop_list[station.uid] = goods
 
 	var/order_id = SSsupply.BuildOrder(customer_account, "Sold out item", shop_list, FACTION_INDEPENDENT)
 	var/list/order_data = SSsupply.order_queue[order_id]
@@ -722,6 +723,7 @@
 
 /datum/unit_test/cargo_station_wealth_bounds_test/start_test()
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	station.wealth = 100
 
 	station.SubtractFromWealth(250)
@@ -758,6 +760,7 @@
 	all_money_accounts += seller_account
 
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	station.AssembleInventory()
 	station.wealth = 15
 
@@ -820,6 +823,7 @@
 
 	if(!fail_reason)
 		var/datum/trading_station/unit_test_duplicate_pricing/station = new
+		RegisterCargoTestStation(station)
 		station.AssembleInventory()
 		station.wealth = 0
 		var/obj/item/pen/pen = new(safe_turf)
@@ -866,15 +870,15 @@
 	var/obj/machinery/trade_beacon/sending/sender = new(safe_turf)
 
 	var/datum/trading_station/unit_test_duplicate_pricing/source_station = new
+	RegisterCargoTestStation(source_station)
 	source_station.name = "Source Station"
 	source_station.uid = "source_station_test"
-	SSsupply.all_trading_stations += source_station
 	SSsupply.visible_trading_stations += source_station
 
 	var/datum/trading_station/caravan/caravan_station = new(FALSE)
+	RegisterCargoTestStation(caravan_station)
 	caravan_station.name = "Caravan Test"
 	caravan_station.uid = "caravan_station_test"
-	SSsupply.all_trading_stations += caravan_station
 	SSsupply.visible_trading_stations += caravan_station
 
 	var/datum/trade_contract/caravan_rendezvous/contract = new
@@ -981,12 +985,13 @@
 
 /datum/unit_test/cargo_station_offer_registry_test/start_test()
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	station.AssembleInventory()
 	var/fail_reason = null
 	if(!length(station.offers) || !length(station.offers_by_category))
 		fail_reason = "Offers registry empty after AssembleInventory()."
 	else
-		var/good_id = station.inventory["Alpha"][1]
+		var/good_id = station.offers_by_category["Alpha"][1]
 		var/datum/trade_offer/offer = station.GetOffer(good_id)
 		if(!offer || offer.id != good_id)
 			fail_reason = "GetOffer() failed to retrieve offer by ID."
@@ -1008,11 +1013,12 @@
 
 /datum/unit_test/cargo_2level_cart_test/start_test()
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	station.AssembleInventory()
 	var/already_registered = (station in SSsupply.all_trading_stations)
 	if(!already_registered)
 		SSsupply.all_trading_stations += station
-	var/good_id = station.inventory["Alpha"][1]
+	var/good_id = station.offers_by_category["Alpha"][1]
 	var/list/cart = list()
 	var/datum/computer_file/program/supply/prog = new
 	prog.shopping_list = cart
@@ -1042,12 +1048,13 @@
 
 /datum/unit_test/cargo_snapshot_security_test/start_test()
 	var/datum/trading_station/unit_test_duplicate_pricing/station = new
+	RegisterCargoTestStation(station)
 	station.AssembleInventory()
-	var/good_id = station.inventory["Alpha"][1]
+	var/good_id = station.offers_by_category["Alpha"][1]
 	var/list/cart = list()
 	var/list/goods = list()
 	goods[good_id] = 1
-	cart[station] = list("Alpha" = goods)
+	cart[station.uid] = goods
 	var/list/snap = SSsupply.BuildMarketSnapshot(cart, FACTION_INDEPENDENT)
 	var/fail_reason = null
 	var/valid_price = SSsupply.GetSnapshotUnitPrice(snap, station, "Alpha", good_id)
@@ -1189,3 +1196,9 @@
 		pass("Loose storage export sells its contents as separate items.")
 	return 1
 
+/datum/unit_test/proc/RegisterCargoTestStation(datum/trading_station/target_station)
+	ASSERT(istype(target_station))
+	if(target_station in SSsupply.all_trading_stations)
+		return
+	target_station.uid = "cargo_test_[ref(target_station)]"
+	SSsupply.all_trading_stations += target_station

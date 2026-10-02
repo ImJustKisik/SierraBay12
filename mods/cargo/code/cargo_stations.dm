@@ -67,18 +67,11 @@
 				GLOB.entered_event.unregister(trading_station.overmap_location, trading_station, /datum/trading_station/proc/Discovered)
 
 /datum/controller/subsystem/supply/proc/GetStationByUid(target_uid)
-	if(!target_uid)
+	if(!istext(target_uid) || !length(target_uid))
 		return null
 	for(var/datum/trading_station/trading_station as anything in all_trading_stations)
-		if(trading_station.uid == target_uid || trading_station.name == target_uid)
+		if(trading_station.uid == target_uid)
 			return trading_station
-	return null
-
-/datum/controller/subsystem/supply/proc/ResolveStation(station_ref)
-	if(istype(station_ref, /datum/trading_station))
-		return station_ref
-	if(istext(station_ref))
-		return GetStationByUid(station_ref)
 	return null
 
 /datum/controller/subsystem/supply/proc/GetVisibleStationByUid(target_uid)
@@ -153,10 +146,10 @@
 	return null
 
 /datum/controller/subsystem/supply/proc/GetShopListTradeRangeBlockReason(atom/source, list/shop_list)
-	if(!islist(shop_list))
-		return null
+	if(!is_valid_cargo_cart(shop_list))
+		return "Invalid cargo cart."
 	for(var/station_key in shop_list)
-		var/datum/trading_station/station = ResolveStation(station_key)
+		var/datum/trading_station/station = GetStationByUid(station_key)
 		if(!istype(station))
 			continue
 		var/block_reason = GetTradeRangeBlockReason(source, station)
