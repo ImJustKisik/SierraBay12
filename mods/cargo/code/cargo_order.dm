@@ -155,13 +155,6 @@
 		to_chat(usr, SPAN_NOTICE("Account unlinked."))
 	return TRUE
 
-/datum/computer_file/program/supply_order/proc/GetCartTotals()
-	var/count = SSsupply.CollectCountsFrom(shopping_list)
-	var/subtotal = round(SSsupply.CollectPriceForList(shopping_list, faction), 0.01)
-	var/fee = round(subtotal * SSsupply.handling_fee, 0.01)
-	var/total = subtotal + fee
-	return list("count" = count, "subtotal" = subtotal, "fee" = fee, "total" = total)
-
 /datum/computer_file/program/supply_order/proc/GetSubmitBlockReason(list/totals)
 	if(!istype(account) || account.suspended)
 		return "Link an active personal bank account before submitting an order."
@@ -209,7 +202,7 @@
 	if(!length(trimtext(reason)))
 		to_chat(user, SPAN_WARNING("A justification reason is required to submit a supply order."))
 		return TRUE
-	var/order_slot = SSsupply.BuildOrder(account, reason, CopyShopList(shopping_list), faction)
+	var/order_slot = SSsupply.BuildOrder(account, reason, shopping_list, faction)
 	if(!order_slot)
 		to_chat(user, SPAN_WARNING("Failed to submit order to cargo queue."))
 		return TRUE
@@ -226,13 +219,13 @@
 	if(!order_id || !(order_id in SSsupply.order_queue))
 		to_chat(user, SPAN_WARNING("Order was not found or has already been fulfilled."))
 		return TRUE
-	var/list/order_data = SSsupply.order_queue[order_id]
-	if(!islist(order_data))
+	var/datum/cargo_order/order_data = SSsupply.order_queue[order_id]
+	if(!istype(order_data))
 		return TRUE
-	if(order_data["processing"] || order_data["status"] == "processing")
+	if(order_data.IsLocked())
 		to_chat(user, SPAN_WARNING("Order [order_id] is currently being processed and cannot be cancelled."))
 		return TRUE
-	var/datum/money_account/req_acct = order_data["requesting_acct"]
+	var/datum/money_account/req_acct = order_data.requesting_acct
 	if(!CanUserCancelOrder(user, req_acct))
 		to_chat(user, SPAN_WARNING("You can only cancel orders submitted by your account."))
 		return TRUE
@@ -247,10 +240,10 @@
 	var/filter_acct_num = isnum(user_or_acct) ? user_or_acct : null
 	var/mob/user = istype(user_or_acct, /mob) ? user_or_acct : null
 	for(var/order_id as anything in SSsupply.order_queue)
-		var/list/order_data = SSsupply.order_queue[order_id]
-		if(!islist(order_data))
+		var/datum/cargo_order/order_data = SSsupply.order_queue[order_id]
+		if(!istype(order_data))
 			continue
-		var/datum/money_account/req_acct = order_data["requesting_acct"]
+		var/datum/money_account/req_acct = order_data.requesting_acct
 		if(!istype(req_acct))
 			continue
 		if(filter_acct_num)
@@ -433,13 +426,14 @@
 		return
 
 	var/list/data = get_header_data() || list()
-	PopulateBaseUiData(data, user)
+	var/list/totals = GetCartTotals()
+	PopulateBaseUiData(data, user, totals)
 
 	switch(current_tab)
 		if(SUPPLY_ORDER_TAB_GOODS)
 			BuildGoodsScreenData(data, user)
 		if(SUPPLY_ORDER_TAB_CART)
-			BuildCartScreenData(data)
+			BuildCartScreenData(data, totals)
 		if(SUPPLY_ORDER_TAB_ORDERS)
 			BuildOrdersScreenData(data, user)
 		if(SUPPLY_ORDER_TAB_ACCOUNT)
@@ -450,3 +444,10 @@
 		ui = new(user, src, ui_key, "mods-cargo_order_client.tmpl", "Supply Order Client", 900, 700, state = GLOB.default_state)
 		ui.set_initial_data(data)
 		ui.open()
+
+/datum/computer_file/program/supply_order/proc/GetCartTotals()
+	var/count = SSsupply.CollectCountsFrom(shopping_list)
+	var/subtotal = round(SSsupply.CollectPriceForList(shopping_list, faction), 0.01)
+	var/fee = round(subtotal * SSsupply.handling_fee, 0.01)
+	var/total = subtotal + fee
+	return list("count" = count, "subtotal" = subtotal, "fee" = fee, "total" = total)

@@ -621,9 +621,10 @@
 	shop_list[station.uid] = goods
 
 	var/order_id = SSsupply.BuildOrder(customer_account, "Personal tool", shop_list, FACTION_INDEPENDENT)
-	var/list/order_data = SSsupply.order_queue[order_id]
-	order_data["cost"] = 15000
-	order_data["fee"] = 1500
+	var/datum/cargo_order/order_data = SSsupply.order_queue[order_id]
+	var/list/packet = order_data.price_snapshot[station.uid][good_id]
+	packet["unit_price"] = 15000
+	order_data.Recalculate()
 
 	var/fail_reason = null
 	if(!SSsupply.PurchaseOrder(beacon, order_id))
@@ -690,9 +691,10 @@
 	shop_list[station.uid] = goods
 
 	var/order_id = SSsupply.BuildOrder(customer_account, "Sold out item", shop_list, FACTION_INDEPENDENT)
-	var/list/order_data = SSsupply.order_queue[order_id]
-	order_data["cost"] = 15000
-	order_data["fee"] = 1500
+	var/datum/cargo_order/order_data = SSsupply.order_queue[order_id]
+	var/list/packet = order_data.price_snapshot[station.uid][good_id]
+	packet["unit_price"] = 15000
+	order_data.Recalculate()
 
 	var/fail_reason = null
 	if(SSsupply.PurchaseOrder(beacon, order_id))

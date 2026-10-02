@@ -100,29 +100,15 @@
 
 /datum/computer_file/program/supply/proc/SerializeOrders()
 	var/list/result = list()
-	var/total_serialized = 0
-	for(var/order_id as anything in SSsupply.order_queue)
-		if(total_serialized >= 50)
+	for(var/order_id in SSsupply.order_queue)
+		if(length(result) >= 50)
 			break
-		var/list/order_data = SSsupply.order_queue[order_id]
-		if(!islist(order_data))
+		var/datum/cargo_order/order = SSsupply.GetCargoOrder(order_id)
+		if(!order)
 			continue
-		var/datum/money_account/requestor = order_data["requesting_acct"]
-		var/buyer_faction = order_data["buyer_faction"] || FACTION_INDEPENDENT
-		var/list/price_snapshot = order_data["price_snapshot"]
-		result.Add(list(list(
-			"id" = order_id,
-			"requestor_name" = requestor ? requestor.owner_name : "Unknown",
-			"buyer_faction" = buyer_faction,
-			"reason" = order_data["reason"] || "No reason provided.",
-			"cost" = round(order_data["cost"], 0.01),
-			"fee" = round(order_data["fee"], 0.01),
-			"total" = round(order_data["cost"] + order_data["fee"], 0.01),
-			"selected" = current_order == order_id,
-			"item_count" = SSsupply.CollectCountsFrom(order_data["contents"]),
-			"contents" = SerializeShopListGroups(order_data["contents"], buyer_faction, price_snapshot)
-		)))
-		total_serialized++
+		var/list/entry = SerializeCargoOrder(order)
+		entry["reason"] = order.reason || "No reason provided."
+		result.Add(list(entry))
 	return result
 
 /datum/computer_file/program/supply/proc/SerializeContractEntry(datum/trade_contract/contract)
@@ -180,28 +166,11 @@
 	return result
 
 /datum/computer_file/program/supply/proc/SerializeSelectedOrder()
-	if(current_order && !(current_order in SSsupply.order_queue))
+	var/datum/cargo_order/order = SSsupply.GetCargoOrder(current_order)
+	if(!order)
 		current_order = null
-	if(!current_order)
 		return null
-
-	var/list/order_data = SSsupply.order_queue[current_order]
-	if(!islist(order_data))
-		return null
-
-	var/datum/money_account/requestor = order_data["requesting_acct"]
-	var/buyer_faction = order_data["buyer_faction"] || FACTION_INDEPENDENT
-	var/list/price_snapshot = order_data["price_snapshot"]
-	return list(
-		"id" = current_order,
-		"requestor_name" = requestor ? requestor.owner_name : "Unknown",
-		"buyer_faction" = buyer_faction,
-		"reason" = order_data["reason"] || "Not provided",
-		"cost" = round(order_data["cost"], 0.01),
-		"fee" = round(order_data["fee"], 0.01),
-		"total" = round(order_data["cost"] + order_data["fee"], 0.01),
-		"contents" = SerializeShopListGroups(order_data["contents"], buyer_faction, price_snapshot)
-	)
+	return SerializeCargoOrder(order)
 
 /datum/computer_file/program/supply/proc/SerializeLogEntries()
 	var/list/result = list()

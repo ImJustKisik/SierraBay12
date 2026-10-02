@@ -335,8 +335,8 @@
 	program.account = linked_account
 	program.test_inserted_id = id_card
 	program.orders_filter = "mine"
-	queue[linked_order_id] = list("requesting_acct" = linked_account, "cost" = 0, "fee" = 0, "contents" = list())
-	queue[card_order_id] = list("requesting_acct" = card_account, "cost" = 0, "fee" = 0, "contents" = list())
+	queue[linked_order_id] = new /datum/cargo_order(linked_order_id, linked_account, "Ownership test", list(), FACTION_INDEPENDENT)
+	queue[card_order_id] = new /datum/cargo_order(card_order_id, card_account, "Ownership test", list(), FACTION_INDEPENDENT)
 
 	var/list/orders = program.SerializeOrders(null)
 	var/fail_reason = null
@@ -347,8 +347,8 @@
 	else if(!orders[1]["can_cancel"] || !orders[2]["can_cancel"])
 		fail_reason = "A visible owned order did not expose the cancel action."
 
-	queue -= linked_order_id
-	queue -= card_order_id
+	SSsupply.DismantleOrder(linked_order_id)
+	SSsupply.DismantleOrder(card_order_id)
 	program.test_inserted_id = null
 	program.account = null
 	qdel(id_card)

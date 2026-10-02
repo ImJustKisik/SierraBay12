@@ -230,3 +230,26 @@
 		return "00:00"
 	var/seconds = max(0, round(deciseconds / 10))
 	return "[pad_left(num2text((seconds / 60) % 60), 2, "0")]:[pad_left(num2text(seconds % 60), 2, "0")]"
+
+
+
+
+/datum/computer_file/program/supply_base/proc/SerializeCargoOrder(datum/cargo_order/order)
+	ASSERT(istype(order))
+	var/datum/money_account/requestor = order.requesting_acct
+	var/list/contents = is_valid_cargo_quote(order.price_snapshot) ? SerializeShopListGroups(order.contents, order.buyer_faction, order.price_snapshot) : list()
+	return list(
+		"id" = order.id,
+		"requestor_name" = requestor ? requestor.owner_name : "Unknown",
+		"requestor_account_number" = requestor ? requestor.account_number : 0,
+		"buyer_faction" = order.buyer_faction,
+		"cost" = round(order.cost, 0.01), "fee" = round(order.fee, 0.01),
+		"total" = round(order.cost + order.fee, 0.01),
+		"reason" = order.reason || "Not provided",
+		"status" = order.status,
+		"status_tone" = order.IsLocked() ? "bad" : "average",
+		"can_cancel" = !order.IsLocked(),
+		"selected" = current_order == order.id,
+		"item_count" = SSsupply.CollectCountsFrom(order.contents),
+		"contents" = contents
+	)

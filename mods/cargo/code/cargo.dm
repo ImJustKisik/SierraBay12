@@ -613,7 +613,7 @@
 	if(!length(trimtext(reason)))
 		to_chat(usr, SPAN_WARNING("A justification reason is required to submit a supply order."))
 		return TRUE
-	current_order = SSsupply.BuildOrder(account, reason, CopyShopList(shopping_list), faction)
+	current_order = SSsupply.BuildOrder(account, reason, shopping_list, faction)
 	if(current_order)
 		ResetShopList()
 		ResetUiForms()
@@ -626,8 +626,8 @@
 		to_chat(usr, SPAN_WARNING("Cargo approval access is required to remove orders."))
 		return TRUE
 	if(order_id in SSsupply.order_queue)
-		var/list/order_data = SSsupply.order_queue[order_id]
-		if(islist(order_data) && (order_data["processing"] || order_data["status"] == "processing"))
+		var/datum/cargo_order/order_data = SSsupply.order_queue[order_id]
+		if(istype(order_data) && (order_data.IsLocked()))
 			to_chat(usr, SPAN_WARNING("Order [order_id] is currently being processed and cannot be removed."))
 			return TRUE
 		SSsupply.DismantleOrder(order_id)
@@ -652,8 +652,8 @@
 		OpenCartForm("save_order")
 		return TRUE
 	name = sanitizeName(name, MAX_NAME_LEN)
-	var/list/order_data = SSsupply.order_queue[order_id]
-	SaveShopList(name, order_data["contents"])
+	var/datum/cargo_order/order_data = SSsupply.order_queue[order_id]
+	SaveShopList(name, order_data.contents)
 	save_order_id = null
 	CloseCartForm()
 	to_chat(usr, SPAN_NOTICE("Order saved to cart presets."))
@@ -670,11 +670,11 @@
 		to_chat(usr, SPAN_WARNING("The receiving beacon is inoperable or unpowered."))
 		return TRUE
 	if(order_id in SSsupply.order_queue)
-		var/list/order_data = SSsupply.order_queue[order_id]
-		if(islist(order_data) && (order_data["processing"] || order_data["status"] == "processing"))
+		var/datum/cargo_order/order_data = SSsupply.order_queue[order_id]
+		if(istype(order_data) && (order_data.IsLocked()))
 			to_chat(usr, SPAN_WARNING("Order [order_id] is already being processed."))
 			return TRUE
-		var/order_range_block = SSsupply.GetShopListTradeRangeBlockReason(receiving, order_data["contents"])
+		var/order_range_block = SSsupply.GetShopListTradeRangeBlockReason(receiving, order_data.contents)
 		if(order_range_block)
 			to_chat(usr, SPAN_WARNING(order_range_block))
 			return TRUE

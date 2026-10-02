@@ -795,24 +795,9 @@
 			return null
 		. += unit_price * count
 
-/datum/controller/subsystem/supply/BuildOrder(requesting_account, reason, list/shopping_list, buyer_faction = null)
-	. = ..(requesting_account, reason, shopping_list, buyer_faction)
-	if(!. || !(. in order_queue))
-		return
-	var/list/order_data = order_queue[.]
-	if(islist(order_data))
-		var/list/snapshot = BuildMarketSnapshot(shopping_list, buyer_faction)
-		order_data["price_snapshot"] = snapshot
-		var/snapshot_cost = GetSnapshotTotalCost(snapshot, shopping_list, buyer_faction)
-		order_data["cost"] = snapshot_cost
-		var/datum/money_account/master_account = get_supply_department_account()
-		var/is_requestor_master = master_account && (requesting_account == master_account)
-		order_data["fee"] = is_requestor_master ? 0 : round(snapshot_cost * handling_fee, 0.01)
-
 #undef MARKET_MOD_BOOM
 #undef MARKET_MOD_SHORTAGE
 #undef MARKET_MOD_INDUSTRIAL_DEMAND
 #undef MARKET_MOD_BLOCKADE
-
 #undef MARKET_TRANS_BUY
 #undef MARKET_TRANS_SELL

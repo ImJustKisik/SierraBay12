@@ -63,37 +63,19 @@
 
 /datum/computer_file/program/supply_order/proc/SerializeOrders(mob/user)
 	var/list/result = list()
-	var/total_serialized = 0
-	for(var/order_id as anything in SSsupply.order_queue)
-		if(total_serialized >= 50)
+	for(var/order_id in SSsupply.order_queue)
+		if(length(result) >= 50)
 			break
-		var/list/order_data = SSsupply.order_queue[order_id]
-		if(!islist(order_data))
+		var/datum/cargo_order/order = SSsupply.GetCargoOrder(order_id)
+		if(!order)
 			continue
-		var/datum/money_account/requestor = order_data["requesting_acct"]
-		var/is_mine = istype(requestor) && CanUserCancelOrder(user, requestor)
+		var/is_mine = CanUserCancelOrder(user, order.requesting_acct)
 		if(orders_filter == "mine" && !is_mine)
 			continue
-		var/is_processing = (order_data["processing"] || order_data["status"] == "processing")
-		var/buyer_faction = order_data["buyer_faction"] || FACTION_INDEPENDENT
-		var/list/price_snapshot = order_data["price_snapshot"]
-		result.Add(list(list(
-			"id" = order_id,
-			"requestor_name" = requestor ? requestor.owner_name : "Unknown",
-			"requestor_account_number" = requestor ? requestor.account_number : 0,
-			"buyer_faction" = buyer_faction,
-			"cost" = round(order_data["cost"], 0.01),
-			"fee" = round(order_data["fee"], 0.01),
-			"total" = round(order_data["cost"] + order_data["fee"], 0.01),
-			"reason" = order_data["reason"] || "Not provided",
-			"status" = order_data["status"] || "Pending",
-			"status_tone" = is_processing ? "bad" : "average",
-			"is_mine" = is_mine,
-			"can_cancel" = is_mine && !is_processing,
-			"selected" = (current_order == order_id),
-			"contents" = SerializeShopListGroups(order_data["contents"], buyer_faction, price_snapshot)
-		)))
-		total_serialized++
+		var/list/entry = SerializeCargoOrder(order)
+		entry["is_mine"] = is_mine
+		entry["can_cancel"] = is_mine && !order.IsLocked()
+		result.Add(list(entry))
 	return result
 
 /datum/computer_file/program/supply_order/proc/BuildOrdersScreenData(list/data, mob/user)

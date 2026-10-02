@@ -1,4 +1,3 @@
-
 // Subsystem for ship trade-network operations.
 /datum/controller/subsystem/supply
 	name = "Supply"
@@ -111,10 +110,8 @@
 	contract_log?.Cut()
 	contract_log = null
 	if(islist(order_queue))
-		for(var/order_id in order_queue)
-			var/list/order = order_queue[order_id]
-			if(islist(order))
-				order.Cut()
+		for(var/order_id in order_queue.Copy())
+			qdel(order_queue[order_id])
 		order_queue.Cut()
 		order_queue = null
 	return ..()

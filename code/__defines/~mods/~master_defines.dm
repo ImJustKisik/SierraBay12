@@ -191,6 +191,7 @@
 #define RHYTHM_HAS_PULSE(r) ((r) == RHYTHM_NSR || (r) == RHYTHM_TACHY || (r) == RHYTHM_BRADY || (r) == RHYTHM_BLOCK || (r) == RHYTHM_STEMI)
 // CARDIAC_OVERHAUL - End
 
+
 #define SETTINGS_SCREEN "settings"
 #define GOODS_SCREEN "goods"
 #define EXPORT_SCREEN "export"
@@ -207,3 +208,8 @@
 #define SUPPLY_ORDER_TAB_CART    "cart"
 #define SUPPLY_ORDER_TAB_ORDERS  "orders"
 #define SUPPLY_ORDER_TAB_ACCOUNT "account"
+
+#define CARGO_ORDER_PENDING "pending"
+#define CARGO_ORDER_PROCESSING "processing"
+#define CARGO_ORDER_COMPLETED "completed"
+#define CARGO_ORDER_CANCELLED "cancelled"
