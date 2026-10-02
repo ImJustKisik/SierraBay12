@@ -1,46 +1,187 @@
-/datum/controller/subsystem/supply/proc/ResolveCartOffer(datum/trading_station/station, cat, good_id)
-	if(!istype(station))
-		return null
-	var/datum/trade_offer/offer = station.GetOffer(good_id)
-	if(!istype(offer))
-		return null
-	if(cat && offer.category != cat)
-		return null
-	if(offer.hidden && !station.hidden_inv_unlocked)
-		return null
-	return offer
-
-/datum/controller/subsystem/supply/proc/ValidateCartItems(obj/machinery/trade_beacon/receiving/beacon, list/items, buyer_faction, list/price_snapshot)
-	if(!isnull(price_snapshot) && !is_valid_cargo_quote(price_snapshot))
-		return null
-	var/total_price = 0
+/datum/cargo_purchase
+	var/obj/machinery/trade_beacon/receiving/beacon
+	var/datum/money_account/account
+	var/datum/cargo_order/order
+	var/list/items = list()
+	var/list/spawned = list()
+	var/list/packing_plan = list()
+	var/obj/structure/closet/locker
+	var/price = 0
 	var/packable = 0
-	for(var/list/data as anything in items)
-		var/datum/trading_station/station = data["station"]
-		if(!istype(station) || GetTradeRangeBlockReason(beacon, station))
-			return null
-		if(GetStationFactionBlockReason(station, buyer_faction))
-			return null
-		var/datum/trade_offer/offer = data["offer"] || ResolveCartOffer(station, data["cat"], data["good_id"])
-		if(!istype(offer))
-			return null
-		if(offer.hidden && !station.hidden_inv_unlocked)
-			return null
-		if(data["cat"] && offer.category != data["cat"])
-			return null
-		if(offer.stock < data["count"])
-			return null
-		var/good_path = offer.item_path
-		if(!good_path)
-			return null
-		var/gid = offer.id
-		var/price = islist(price_snapshot) ? GetSnapshotUnitPrice(price_snapshot, station, data["cat"], gid) : GetImportCost(gid, station, buyer_faction, data["cat"])
-		if(!isnum(price) || price < 1)
-			return null
-		total_price += price * data["count"]
-		if(CanPackPurchase(good_path))
-			packable += data["count"]
-	return list("price" = total_price, "packable" = packable)
+	var/buyer_faction
+	var/buyer_name
+	var/committed = FALSE
+
+/datum/cargo_purchase/Destroy()
+	if(!committed)
+		Rollback()
+	ClearItems()
+	packing_plan.Cut()
+	packing_plan = null
+	spawned.Cut()
+	spawned = null
+	locker = null
+	beacon = null
+	account = null
+	order = null
+	buyer_faction = null
+	return ..()
+
+/datum/cargo_purchase/proc/ClearItems()
+	for(var/list/item as anything in items)
+		item.Cut()
+	items.Cut()
+	items = null
+
+/datum/cargo_purchase/proc/IsPersonalOrder()
+	return order && order.requesting_acct != account
+
+/datum/cargo_purchase/proc/PlanPacking()
+	packable = 0
+	for(var/list/item_data as anything in items)
+		if(!SSsupply.CanPackPurchase(item_data["item_path"]))
+			continue
+		var/obj/item/item_type = item_data["item_path"]
+		item_data["packable"] = TRUE
+		item_data["packing_size"] = initial(item_type.w_class) / 2
+		packable += item_data["count"]
+	packing_plan["use_locker"] = packable > 1
+	packing_plan["personal"] = IsPersonalOrder()
+	packing_plan["buyer_name"] = buyer_name
+
+/datum/cargo_purchase/proc/Execute()
+	if(committed || !IsReady())
+		return FALSE
+	if(!SpawnItems() || !IsReady() || !ChargeAccount())
+		Rollback()
+		return FALSE
+	var/info = FulfillStock()
+	var/atom/invoice_location = locker || get_turf(spawned[1])
+	SSsupply.CreateLogEntry("Shipping", buyer_name, info, price, TRUE, invoice_location)
+	RecordDemand()
+	committed = TRUE
+	return TRUE
+
+/datum/cargo_purchase/proc/SpawnItems()
+	if(packing_plan["use_locker"])
+		locker = SSsupply.CreateOrderLocker(beacon, packing_plan["personal"], packing_plan["buyer_name"])
+		if(!locker || QDELETED(locker))
+			return FALSE
+		spawned += locker
+	var/remaining_capacity = locker ? locker.storage_capacity : 0
+	for(var/list/item_data as anything in items)
+		for(var/i in 1 to item_data["count"])
+			var/atom/movable/item = SpawnItem(item_data, remaining_capacity)
+			if(!item || QDELETED(item))
+				return FALSE
+			spawned += item
+			if(locker && item.loc == locker)
+				remaining_capacity -= locker.content_size(item)
+	return TRUE
+
+/datum/cargo_purchase/proc/SpawnItem(list/item_data, remaining_capacity)
+	var/path = item_data["item_path"]
+	if(locker && item_data["packable"] && item_data["packing_size"] <= remaining_capacity)
+		return new path(locker)
+	return beacon.DropItem(path)
+
+/datum/cargo_purchase/proc/Rollback()
+	for(var/i = length(spawned) to 1 step -1)
+		var/atom/movable/item = spawned[i]
+		if(!QDELETED(item))
+			qdel(item)
+	spawned.Cut()
+	locker = null
+
+/datum/cargo_purchase/proc/ChargeAccount()
+	if(!price)
+		return TRUE
+	if(IsPersonalOrder())
+		if(!account.withdraw(price, "Trade Network Purchase", "Trade Network"))
+			account.money -= price
+		return TRUE
+	return account.money >= price && account.withdraw(price, "Trade Network Purchase", "Trade Network")
+
+/datum/cargo_purchase/proc/FulfillStock()
+	var/list/wealth_by_station = list()
+	var/contents_info = ""
+	for(var/list/item_data as anything in items)
+		var/datum/trading_station/station = item_data["station"]
+		var/datum/trade_offer/offer = item_data["offer"]
+		var/count = item_data["count"]
+		wealth_by_station[station] += item_data["unit_price"] * count
+		offer.ConsumeStock(count)
+		contents_info += "<li>[count]x [offer.name]</li>"
+	for(var/datum/trading_station/station as anything in wealth_by_station)
+		station.AddToWealth(wealth_by_station[station])
+	return contents_info
+
+/datum/cargo_purchase/proc/RecordDemand()
+	for(var/list/item_data as anything in items)
+		var/datum/trade_offer/offer = item_data["offer"]
+		SSsupply.ApplyTradeTransaction(item_data["station"], offer.category, offer.id, item_data["count"], "buy", buyer_faction)
+
+/datum/controller/subsystem/supply/proc/PreparePurchase(obj/machinery/trade_beacon/receiving/beacon, datum/money_account/account, list/cart, buyer_faction = null, list/price_snapshot = null, datum/cargo_order/order = null)
+	if(!istype(beacon) || QDELETED(beacon) || !beacon.operable() || !istype(account) || QDELETED(account))
+		return null
+	if((order || !isnull(price_snapshot)) && !is_valid_cargo_quote(price_snapshot))
+		return null
+	var/list/items = ExtractCartItems(cart)
+	if(!length(items))
+		return null
+	var/datum/cargo_purchase/purchase = new
+	purchase.beacon = beacon
+	purchase.account = account
+	purchase.order = order
+	purchase.buyer_faction = buyer_faction
+	purchase.buyer_name = purchase.IsPersonalOrder() ? order.requesting_acct.owner_name : account.owner_name
+	purchase.items = items
+	if(!QuotePurchase(purchase, price_snapshot) || (order && purchase.price != order.cost))
+		qdel(purchase)
+		return null
+	purchase.PlanPacking()
+	return purchase
+
+/datum/controller/subsystem/supply/proc/QuotePurchase(datum/cargo_purchase/purchase, list/price_snapshot)
+	for(var/list/item_data as anything in purchase.items)
+		if(!QuotePurchaseItem(purchase, item_data, price_snapshot))
+			return FALSE
+	return TRUE
+
+/datum/controller/subsystem/supply/proc/QuotePurchaseItem(datum/cargo_purchase/purchase, list/item_data, list/price_snapshot)
+	var/datum/trading_station/station = item_data["station"]
+	var/datum/trade_offer/offer = item_data["offer"]
+	if(GetTradeRangeBlockReason(purchase.beacon, station) || GetStationFactionBlockReason(station, purchase.buyer_faction))
+		return FALSE
+	if(!offer.CanFulfill(item_data["count"]) || !offer.item_path)
+		return FALSE
+	var/unit_price = QuotePurchaseUnitPrice(purchase, item_data, price_snapshot)
+	if(!isnum(unit_price) || isnan(unit_price) || unit_price < 1 || unit_price >= INFINITY)
+		return FALSE
+	item_data["unit_price"] = unit_price
+	item_data["item_path"] = offer.item_path
+	purchase.price += unit_price * item_data["count"]
+	return TRUE
+
+/datum/controller/subsystem/supply/proc/QuotePurchaseUnitPrice(datum/cargo_purchase/purchase, list/item_data, list/price_snapshot)
+	var/datum/trading_station/station = item_data["station"]
+	var/datum/trade_offer/offer = item_data["offer"]
+	if(isnull(price_snapshot))
+		return GetImportCost(offer.id, station, purchase.buyer_faction, offer.category)
+	var/unit_price = GetSnapshotUnitPrice(price_snapshot, station, offer.category, offer.id)
+	if(isnull(unit_price))
+		return null
+	var/list/goods = price_snapshot[station.uid]
+	var/list/packet = goods[offer.id]
+	return packet["amount"] == item_data["count"] ? unit_price : null
+
+/datum/controller/subsystem/supply/proc/Buy(obj/machinery/trade_beacon/receiving/beacon, datum/money_account/account, list/cart, buyer_faction = null, list/price_snapshot = null)
+	var/datum/cargo_purchase/purchase = PreparePurchase(beacon, account, cart, buyer_faction, price_snapshot)
+	if(!purchase)
+		return FALSE
+	var/success = purchase.Execute()
+	qdel(purchase)
+	return success
 
 /datum/controller/subsystem/supply/proc/CreateOrderLocker(obj/machinery/trade_beacon/receiving/beacon, is_order, buyer_name)
 	var/obj/structure/closet/crate/trade/locker = beacon.DropItem(/obj/structure/closet/crate/trade)
@@ -59,87 +200,21 @@
 	var/capacity = isnull(remaining_capacity) ? initial(crate_type.storage_capacity) : remaining_capacity
 	return initial(item_type.w_class) < ITEM_SIZE_NO_CONTAINER && initial(item_type.w_class) / 2 <= capacity
 
-/datum/controller/subsystem/supply/proc/SpawnPurchasedItems(obj/machinery/trade_beacon/receiving/beacon, list/cart_items, obj/structure/closet/locker)
-	var/list/spawned = list()
-	var/remaining_capacity = locker ? locker.storage_capacity : 0
-	if(locker)
-		spawned += locker
-	for(var/list/data as anything in cart_items)
-		var/datum/trading_station/station = data["station"]
-		var/datum/trade_offer/offer = data["offer"] || ResolveCartOffer(station, data["cat"], data["good_id"])
-		var/path = offer ? offer.item_path : station.GetGoodPath(data["cat"], data["good_id"])
-		for(var/i in 1 to data["count"])
-			if(locker && CanPackPurchase(path, remaining_capacity))
-				var/obj/item/item = new path(locker)
-				remaining_capacity -= locker.content_size(item)
-			else
-				var/atom/movable/item = beacon.DropItem(path)
-				if(!item)
-					for(var/atom/movable/spawned_item as anything in spawned)
-						qdel(spawned_item)
-					if(locker)
-						qdel(locker)
-					return null
-				spawned += item
-	return spawned
-
-/datum/controller/subsystem/supply/proc/FulfillCartStock(list/cart_items, buyer_faction, list/price_snapshot)
-	var/list/wealth_by_station = list()
-	var/contents_info = ""
-	for(var/list/data as anything in cart_items)
-		var/datum/trading_station/station = data["station"]
-		var/datum/trade_offer/offer = data["offer"] || ResolveCartOffer(station, data["cat"], data["good_id"])
-		var/gid = offer ? offer.id : data["good_id"]
-		var/count = data["count"]
-		var/price = islist(price_snapshot) ? GetSnapshotUnitPrice(price_snapshot, station, data["cat"], gid) : GetImportCost(gid, station, buyer_faction, data["cat"])
-		wealth_by_station[station] += price * count
-		if(offer)
-			offer.ConsumeStock(count)
-		else
-			station.SetGoodAmount(data["cat"], gid, max(0, station.GetGoodAmount(data["cat"], gid) - count))
-		var/item_name = offer ? offer.name : station.GetGoodName(data["cat"], gid)
-		contents_info += "<li>[count]x [item_name]</li>"
-	for(var/datum/trading_station/station as anything in wealth_by_station)
-		station.AddToWealth(wealth_by_station[station])
-	return contents_info
-
-/datum/controller/subsystem/supply/proc/ChargeBuyerAccount(datum/money_account/account, price, is_escrow)
-	if(!price)
-		return TRUE
-	if(is_escrow)
-		if(!account.withdraw(price, "Trade Network Purchase", "Trade Network"))
-			account.money -= price
-		return TRUE
-	if(account.money < price || !account.withdraw(price, "Trade Network Purchase", "Trade Network"))
+/datum/cargo_purchase/proc/IsReady()
+	if(!beacon || QDELETED(beacon) || !beacon.operable() || !account || QDELETED(account) || account.suspended || account.money < price)
 		return FALSE
+	if(order && (QDELETED(order) || order.status != CARGO_ORDER_PROCESSING))
+		return FALSE
+	for(var/list/item_data as anything in items)
+		if(!IsItemReady(item_data))
+			return FALSE
 	return TRUE
 
-/datum/controller/subsystem/supply/proc/Buy(obj/machinery/trade_beacon/receiving/receiver_beacon, datum/money_account/account, list/shop_list, is_order = FALSE, buyer_name = null, buyer_faction = null, list/price_snapshot = null, is_escrow = FALSE, order_cost = null)
-	if(QDELETED(receiver_beacon) || !istype(receiver_beacon) || !receiver_beacon.operable() || !account || !islist(shop_list) || !length(shop_list))
+/datum/cargo_purchase/proc/IsItemReady(list/item_data)
+	var/datum/trading_station/station = item_data["station"]
+	var/datum/trade_offer/offer = item_data["offer"]
+	if(QDELETED(station) || QDELETED(offer) || !station || !offer)
 		return FALSE
-	var/list/cart_items = ExtractCartItems(shop_list)
-	if(!length(cart_items))
+	if(station.GetOffer(item_data["good_id"]) != offer || offer.item_path != item_data["item_path"] || !offer.CanFulfill(item_data["count"]))
 		return FALSE
-	var/list/check = ValidateCartItems(receiver_beacon, cart_items, buyer_faction, price_snapshot)
-	if(!check)
-		return FALSE
-	var/price = (isnum(order_cost) && order_cost > 0) ? order_cost : check["price"]
-	if(!is_escrow && account.money < price)
-		return FALSE
-	var/obj/structure/closet/locker = (check["packable"] > 1) ? CreateOrderLocker(receiver_beacon, is_order, buyer_name) : null
-	if(check["packable"] > 1 && !locker)
-		return FALSE
-	var/list/spawned = SpawnPurchasedItems(receiver_beacon, cart_items, locker)
-	if(!spawned)
-		return FALSE
-	if(!ChargeBuyerAccount(account, price, is_escrow))
-		if(locker)
-			qdel(locker)
-		for(var/atom/movable/spawned_item in spawned)
-			qdel(spawned_item)
-		return FALSE
-	var/info = FulfillCartStock(cart_items, buyer_faction, price_snapshot)
-	var/atom/invoice_loc = locker || (length(spawned) ? get_turf(spawned[1]) : null)
-	CreateLogEntry("Shipping", is_order && buyer_name ? buyer_name : account.owner_name, info, price, TRUE, invoice_loc)
-	TrackLiveMarketSales(shop_list)
-	return TRUE
+	return !SSsupply.GetTradeRangeBlockReason(beacon, station) && !SSsupply.GetStationFactionBlockReason(station, buyer_faction)

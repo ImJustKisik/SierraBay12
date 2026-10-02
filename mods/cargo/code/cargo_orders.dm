@@ -119,12 +119,15 @@
 
 /datum/controller/subsystem/supply/proc/ExecuteOrderPurchase(obj/machinery/trade_beacon/receiving/beacon, datum/cargo_order/order, datum/money_account/master_account, datum/money_account/requesting_account)
 	var/total_cost = order.cost + order.fee
-	var/personal = master_account != requesting_account
-	if(requesting_account.money < (personal ? total_cost : order.cost))
+	if(requesting_account.money < (master_account == requesting_account ? order.cost : total_cost))
+		return FALSE
+	var/datum/cargo_purchase/purchase = PreparePurchase(beacon, master_account, order.contents, order.buyer_faction, order.price_snapshot, order)
+	if(!purchase)
 		return FALSE
 	order.status = CARGO_ORDER_PROCESSING
 	var/funded = FundOrderEscrow(order, master_account)
-	var/success = funded && Buy(beacon, master_account, order.contents, personal, requesting_account.owner_name, order.buyer_faction, order.price_snapshot, personal, personal ? order.cost : null)
+	var/success = funded && purchase.Execute()
+	qdel(purchase)
 	if(!success)
 		RefundEscrowOrder(order)
 		return FALSE

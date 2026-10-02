@@ -212,7 +212,7 @@
 	shop_list[station.uid] = alpha_goods
 	alpha_goods[good_id] = 2
 
-	if(SSsupply.Buy(beacon, account, shop_list, FALSE, null, FACTION_INDEPENDENT))
+	if(SSsupply.Buy(beacon, account, shop_list, FACTION_INDEPENDENT))
 		fail("Purchase succeeded with stale stock.")
 	else if(station.GetGoodAmount("Alpha", good_id) != 1)
 		fail("Stock changed after a rejected stale-stock purchase.")

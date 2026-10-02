@@ -409,7 +409,7 @@
 		var/list/price_snapshot = SSsupply.BuildMarketSnapshot(shop_list, FACTION_INDEPENDENT)
 		var/initial_demand = station.GetLiveMarketDemandScore("Alpha", good_id)
 
-		if(!SSsupply.Buy(beacon, account, shop_list, FALSE, null, FACTION_INDEPENDENT, price_snapshot))
+		if(!SSsupply.Buy(beacon, account, shop_list, FACTION_INDEPENDENT, price_snapshot))
 			fail_reason = "Buy() with price snapshot failed."
 		else
 			var/new_demand = station.GetLiveMarketDemandScore("Alpha", good_id)

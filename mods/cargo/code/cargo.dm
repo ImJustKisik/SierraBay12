@@ -496,7 +496,7 @@
 	if(cart_range_block)
 		to_chat(usr, SPAN_WARNING(cart_range_block))
 		return TRUE
-	if(!SSsupply.Buy(receiving, account, shopping_list, FALSE, null, faction))
+	if(!SSsupply.Buy(receiving, account, shopping_list, faction))
 		to_chat(usr, SPAN_WARNING("Purchase failed. Check account balance, stock, and receiving area."))
 	else
 		ResetShopList()
