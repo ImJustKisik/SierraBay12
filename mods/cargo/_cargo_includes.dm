@@ -46,6 +46,7 @@
 #include "code/trading_station_materials.dm"
 #include "code/trading_station_weapons.dm"
 #include "code/cargo_tests.dm"
+#include "code/cargo_refactor_tests.dm"
 #include "code/cargo_ui_tests.dm"
 #include "code/cargo_contract_tests.dm"
 #include "code/beacons/trade_circuitboards.dm"

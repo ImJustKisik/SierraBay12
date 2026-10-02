@@ -76,6 +76,7 @@
 	RefreshTradeBeacons()
 
 /datum/controller/subsystem/supply/fire(reschedule)
+	ProcessPendingOrderRefunds()
 	ProcessPendingContractRefunds()
 	for(var/datum/trading_station/station as anything in all_trading_stations)
 		if(QDELETED(station))

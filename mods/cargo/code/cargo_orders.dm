@@ -11,6 +11,7 @@
 	var/viewable_contents
 	var/datum/money_account/escrow_account
 	var/escrow_amount = 0
+	var/pending_refund = 0
 
 /datum/cargo_order/New(new_id, datum/money_account/account, new_reason, list/cart, new_faction)
 	..()
@@ -90,12 +91,19 @@
 	return order_id
 
 /datum/controller/subsystem/supply/proc/RefundEscrowOrder(datum/cargo_order/order)
-	if(order.escrow_amount)
-		order.escrow_account.transfer(order.requesting_acct, order.escrow_amount, "Trade Network Order Refund")
-	order.ClearEscrow()
-	order.status = CARGO_ORDER_PENDING
-	if(!length(order.contents))
-		DismantleOrder(order.id)
+	ASSERT(istype(order))
+	if(!order.escrow_amount)
+		order.status = CARGO_ORDER_PENDING
+		if(!length(order.contents))
+			DismantleOrder(order.id)
+		return TRUE
+	order.pending_refund = order.escrow_amount
+	order.status = CARGO_ORDER_REFUND_PENDING
+	if(order.TryRefund())
+		return TRUE
+	var/account_name = order.requesting_acct?.owner_name || "Unavailable account"
+	CreateLogEntry("Order", account_name, "<li>Order [order.id]: refund pending ([order.pending_refund]).</li>", 0)
+	return FALSE
 
 /datum/controller/subsystem/supply/proc/CompleteOrder(order_id)
 	var/datum/cargo_order/order = GetCargoOrder(order_id)
@@ -142,8 +150,27 @@
 /datum/cargo_order/proc/ClearEscrow()
 	escrow_account = null
 	escrow_amount = 0
+	pending_refund = 0
 
+/datum/cargo_order/proc/TryRefund()
+	if(status != CARGO_ORDER_REFUND_PENDING || pending_refund <= 0)
+		return FALSE
+	if(QDELETED(escrow_account) || QDELETED(requesting_acct) || !escrow_account || !requesting_acct)
+		return FALSE
+	if(!escrow_account.transfer(requesting_acct, pending_refund, "Trade Network Order Refund"))
+		return FALSE
+	SSsupply.CreateLogEntry("Order", requesting_acct.owner_name, "<li>Order [id]: escrow refunded.</li>", -pending_refund)
+	ClearEscrow()
+	status = CARGO_ORDER_PENDING
+	if(!length(contents))
+		SSsupply.DismantleOrder(id)
+	return TRUE
 
+/datum/controller/subsystem/supply/proc/ProcessPendingOrderRefunds()
+	for(var/order_id in order_queue.Copy())
+		var/datum/cargo_order/order = GetCargoOrder(order_id)
+		if(order?.status == CARGO_ORDER_REFUND_PENDING)
+			order.TryRefund()
 
 /datum/controller/subsystem/supply/proc/FundOrderEscrow(datum/cargo_order/order, datum/money_account/master_account)
 	if(master_account == order.requesting_acct)

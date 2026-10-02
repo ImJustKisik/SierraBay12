@@ -244,7 +244,7 @@
 		"cost" = round(order.cost, 0.01), "fee" = round(order.fee, 0.01),
 		"total" = round(order.cost + order.fee, 0.01),
 		"reason" = order.reason || "Not provided",
-		"status" = order.status,
+		"status" = order.status == CARGO_ORDER_REFUND_PENDING ? "Refund pending" : order.status,
 		"status_tone" = order.IsLocked() ? "bad" : "average",
 		"can_cancel" = !order.IsLocked(),
 		"selected" = current_order == order.id,

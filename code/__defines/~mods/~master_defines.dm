@@ -213,3 +213,5 @@
 #define CARGO_ORDER_PROCESSING "processing"
 #define CARGO_ORDER_COMPLETED "completed"
 #define CARGO_ORDER_CANCELLED "cancelled"
+
+#define CARGO_ORDER_REFUND_PENDING "refund_pending"

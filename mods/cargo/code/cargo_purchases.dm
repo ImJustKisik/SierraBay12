@@ -96,10 +96,6 @@
 /datum/cargo_purchase/proc/ChargeAccount()
 	if(!price)
 		return TRUE
-	if(IsPersonalOrder())
-		if(!account.withdraw(price, "Trade Network Purchase", "Trade Network"))
-			account.money -= price
-		return TRUE
 	return account.money >= price && account.withdraw(price, "Trade Network Purchase", "Trade Network")
 
 /datum/cargo_purchase/proc/FulfillStock()

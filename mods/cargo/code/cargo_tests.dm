@@ -584,140 +584,46 @@
 	name = "CARGO: Order approval succeeds with zero cargo funds via escrow"
 
 /datum/unit_test/cargo_order_escrow_low_cargo_budget_test/start_test()
-	var/turf/safe_turf = get_safe_turf()
-	if(!safe_turf)
-		skip("Safe turf unavailable.")
-		return 1
 
-	for(var/atom/movable/AM in range(2, safe_turf))
-		if(!AM.anchored)
-			qdel(AM)
-
-	var/datum/money_account/old_supply = department_accounts["Supply"]
-	var/datum/money_account/cargo_account = new
-	cargo_account.owner_name = "Supply Account"
-	cargo_account.account_number = 777001
-	cargo_account.money = 0
-	department_accounts["Supply"] = cargo_account
-	all_money_accounts += cargo_account
-
-	var/datum/money_account/customer_account = new
-	customer_account.owner_name = "Customer"
-	customer_account.account_number = 777002
-	customer_account.money = 16500
-	all_money_accounts += customer_account
-
-	var/datum/trading_station/unit_test_duplicate_pricing/station = new
-	RegisterCargoTestStation(station)
-	station.AssembleInventory()
-	station.InitGoods()
-	var/good_id = station.offers_by_category["Alpha"][1]
-	station.SetGoodAmount("Alpha", good_id, 5)
-
-	var/obj/machinery/trade_beacon/receiving/beacon = new(safe_turf)
-	var/list/shop_list = list()
-	var/list/goods = list()
-	goods[good_id] = 1
-	shop_list[station.uid] = goods
-
-	var/order_id = SSsupply.BuildOrder(customer_account, "Personal tool", shop_list, FACTION_INDEPENDENT)
-	var/datum/cargo_order/order_data = SSsupply.order_queue[order_id]
-	var/list/packet = order_data.price_snapshot[station.uid][good_id]
+	var/datum/cargo_test_context/context = new(get_safe_turf())
+	context.customer_account.money = 16500
+	var/datum/cargo_order/order = context.BuildTestOrder()
+	var/list/packet = order.price_snapshot[context.station.uid][context.good_id]
 	packet["unit_price"] = 15000
-	order_data.Recalculate()
-
+	order.Recalculate()
+	var/order_id = order.id
 	var/fail_reason = null
-	if(!SSsupply.PurchaseOrder(beacon, order_id))
-		fail_reason = "PurchaseOrder() failed when cargo account had 0 funds."
-	else if(customer_account.money != 0)
-		fail_reason = "Customer account balance is [customer_account.money], expected 0."
-	else if(cargo_account.money != 1500)
-		fail_reason = "Cargo account balance is [cargo_account.money], expected fee of 1500."
-	else if(order_id in SSsupply.order_queue)
-		fail_reason = "Successful order [order_id] was not removed from order_queue."
-
-	department_accounts["Supply"] = old_supply
-	all_money_accounts -= cargo_account
-	all_money_accounts -= customer_account
-	qdel(cargo_account)
-	qdel(customer_account)
-	qdel(beacon)
-	qdel(station)
-
-	for(var/atom/movable/AM in range(2, safe_turf))
-		if(!AM.anchored)
-			qdel(AM)
-
+	if(!SSsupply.PurchaseOrder(context.beacon, order_id))
+		fail_reason = "PurchaseOrder failed when cargo had zero funds."
+	else if(context.customer_account.money || context.cargo_account.money != 1500 || SSsupply.GetCargoOrder(order_id))
+		fail_reason = "Successful escrow purchase retained the wrong balances or queue entry."
+	qdel(context)
 	if(fail_reason)
 		fail(fail_reason)
 	else
-		pass("Escrow orders succeed even when cargo has 0 balance, correctly retaining fee.")
+		pass("Escrow covers a zero cargo budget and leaves the fee with cargo.")
 	return 1
 
 /datum/unit_test/cargo_order_escrow_refund_on_failure_test
 	name = "CARGO: Failed order approval refunds customer escrow payment in full"
 
 /datum/unit_test/cargo_order_escrow_refund_on_failure_test/start_test()
-	var/turf/safe_turf = get_safe_turf()
-	if(!safe_turf)
-		skip("Safe turf unavailable.")
-		return 1
 
-	var/datum/money_account/old_supply = department_accounts["Supply"]
-	var/datum/money_account/cargo_account = new
-	cargo_account.owner_name = "Supply Account"
-	cargo_account.account_number = 777003
-	cargo_account.money = 0
-	department_accounts["Supply"] = cargo_account
-	all_money_accounts += cargo_account
-
-	var/datum/money_account/customer_account = new
-	customer_account.owner_name = "Customer"
-	customer_account.account_number = 777004
-	customer_account.money = 16500
-	all_money_accounts += customer_account
-
-	var/datum/trading_station/unit_test_duplicate_pricing/station = new
-	RegisterCargoTestStation(station)
-	station.AssembleInventory()
-	station.InitGoods()
-	var/good_id = station.offers_by_category["Alpha"][1]
-	station.SetGoodAmount("Alpha", good_id, 0)
-
-	var/obj/machinery/trade_beacon/receiving/beacon = new(safe_turf)
-	var/list/shop_list = list()
-	var/list/goods = list()
-	goods[good_id] = 1
-	shop_list[station.uid] = goods
-
-	var/order_id = SSsupply.BuildOrder(customer_account, "Sold out item", shop_list, FACTION_INDEPENDENT)
-	var/datum/cargo_order/order_data = SSsupply.order_queue[order_id]
-	var/list/packet = order_data.price_snapshot[station.uid][good_id]
-	packet["unit_price"] = 15000
-	order_data.Recalculate()
-
+	var/datum/cargo_test_context/context = new(get_safe_turf())
+	context.cargo_account.reject_withdrawal = TRUE
+	var/datum/cargo_order/order = context.BuildTestOrder()
 	var/fail_reason = null
-	if(SSsupply.PurchaseOrder(beacon, order_id))
-		fail_reason = "PurchaseOrder() succeeded despite out-of-stock item."
-	else if(customer_account.money != 16500)
-		fail_reason = "Customer account was not refunded after failed Buy(). Balance: [customer_account.money]."
-	else if(cargo_account.money != 0)
-		fail_reason = "Cargo account retained funds after failed Buy(). Balance: [cargo_account.money]."
-	else if(!(order_id in SSsupply.order_queue))
-		fail_reason = "Failed order [order_id] was prematurely removed from order_queue."
-
-	department_accounts["Supply"] = old_supply
-	all_money_accounts -= cargo_account
-	all_money_accounts -= customer_account
-	qdel(cargo_account)
-	qdel(customer_account)
-	qdel(beacon)
-	qdel(station)
-
+	if(SSsupply.PurchaseOrder(context.beacon, order.id))
+		fail_reason = "Purchase succeeded despite rejected payment."
+	else if(context.cargo_account.withdrawal_attempts != 1)
+		fail_reason = "Test did not reach the withdrawal after funding escrow."
+	else if(context.customer_account.money != 1000 || context.cargo_account.money || order.status != CARGO_ORDER_PENDING)
+		fail_reason = "Failed payment did not refund escrow and restore the pending order."
+	qdel(context)
 	if(fail_reason)
 		fail(fail_reason)
 	else
-		pass("Escrow payment is refunded in full upon purchase failure.")
+		pass("Rejected withdrawal refunds escrow in full.")
 	return 1
 
 /datum/unit_test/cargo_station_wealth_bounds_test
