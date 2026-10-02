@@ -7,11 +7,12 @@
 		var/list/cart_data = saved_shopping_lists[cart_name]
 		if(!islist(cart_data))
 			continue
+		var/list/totals = SSsupply.GetCartTotals(cart_data, faction)
 		result.Add(list(list(
 			"index" = i,
 			"name" = cart_name,
-			"count" = SSsupply.CollectCountsFrom(cart_data),
-			"total" = GetSavedCartTotal(cart_data)
+			"count" = totals["count"],
+			"total" = GetSavedCartTotal(cart_data, totals)
 		)))
 	return result
 
@@ -230,9 +231,6 @@
 		return "00:00"
 	var/seconds = max(0, round(deciseconds / 10))
 	return "[pad_left(num2text((seconds / 60) % 60), 2, "0")]:[pad_left(num2text(seconds % 60), 2, "0")]"
-
-
-
 
 /datum/computer_file/program/supply_base/proc/SerializeCargoOrder(datum/cargo_order/order)
 	ASSERT(istype(order))

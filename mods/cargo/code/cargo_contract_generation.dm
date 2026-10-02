@@ -104,8 +104,8 @@
 				"category" = match["category"],
 				"good_id" = match["good_id"]
 			)
-	for(var/category_name in station.inventory)
-		var/list/category = station.inventory[category_name]
+	for(var/category_name in station.offers_by_category)
+		var/list/category = station.offers_by_category[category_name]
 		if(!islist(category))
 			continue
 		for(var/good_id in category)
@@ -146,8 +146,8 @@
 	var/target_value = clamp(route_distance * 120, min_trade_contract_value, max_trade_contract_value)
 	var/list/best_candidate = null
 
-	for(var/source_category_name in source_station.inventory)
-		var/list/source_category = source_station.inventory[source_category_name]
+	for(var/source_category_name in source_station.offers_by_category)
+		var/list/source_category = source_station.offers_by_category[source_category_name]
 		if(!islist(source_category))
 			continue
 		for(var/source_good_id in source_category)
@@ -188,34 +188,6 @@
 		return null
 
 	return BuildCandidatePayload(source_station, market, source_category_name, source_good_id, item_path, source_unit_cost, amount, base_value, route_distance)
-
-/datum/controller/subsystem/supply/proc/BuildCandidatePayload(datum/trading_station/source_station, list/market, source_category_name, source_good_id, item_path, source_unit_cost, amount, base_value, route_distance)
-	var/destination_sell_price = market["sell_price"]
-	var/reward = CalculateContractReward(base_value, route_distance, destination_sell_price, source_unit_cost, amount)
-	return list(
-		"score" = market["score"],
-		"market_reason" = market["reason"],
-		"source_category" = source_category_name,
-		"source_good_id" = source_good_id,
-		"destination_category" = market["category"],
-		"destination_good_id" = market["good_id"],
-		"source_unit_cost" = source_unit_cost,
-		"destination_sell_price" = destination_sell_price,
-		"distance" = route_distance,
-		"base_value" = base_value,
-		"reward" = reward,
-		"deposit" = round(base_value * 0.3),
-		"penalty" = round(max(base_value, destination_sell_price * amount) * 1.5),
-		"content" = list(
-			"category" = source_category_name,
-			"good_id" = source_good_id,
-			"destination_category" = market["category"],
-			"destination_good_id" = market["good_id"],
-			"item_path" = item_path,
-			"name" = source_station.GetGoodName(source_category_name, source_good_id),
-			"amount" = amount
-		)
-	)
 
 /datum/controller/subsystem/supply/proc/CalculateContractReward(base_value, route_distance, destination_sell_price, source_unit_cost, amount)
 	var/value_commission = round(base_value * 0.2)
@@ -383,3 +355,31 @@
 	if(!istype(contract))
 		return FALSE
 	return contract.Deliver(sender_beacon)
+
+/datum/controller/subsystem/supply/proc/BuildCandidatePayload(datum/trading_station/source_station, list/market, source_category_name, source_good_id, item_path, source_unit_cost, amount, base_value, route_distance)
+	var/destination_sell_price = market["sell_price"]
+	var/reward = CalculateContractReward(base_value, route_distance, destination_sell_price, source_unit_cost, amount)
+	return list(
+		"score" = market["score"],
+		"market_reason" = market["reason"],
+		"source_category" = source_category_name,
+		"source_good_id" = source_good_id,
+		"destination_category" = market["category"],
+		"destination_good_id" = market["good_id"],
+		"source_unit_cost" = source_unit_cost,
+		"destination_sell_price" = destination_sell_price,
+		"distance" = route_distance,
+		"base_value" = base_value,
+		"reward" = reward,
+		"deposit" = round(base_value * 0.3),
+		"penalty" = round(max(base_value, destination_sell_price * amount) * 1.5),
+		"content" = list(
+			"category" = source_category_name,
+			"good_id" = source_good_id,
+			"destination_category" = market["category"],
+			"destination_good_id" = market["good_id"],
+			"item_path" = item_path,
+			"name" = source_station.GetGoodName(source_category_name, source_good_id),
+			"amount" = amount
+		)
+	)

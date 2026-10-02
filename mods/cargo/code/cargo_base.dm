@@ -137,8 +137,9 @@ GLOBAL_LIST_EMPTY(cargo_item_icon_cache)
 		ClearShopList(saved_shopping_lists[name])
 		saved_shopping_lists -= name
 
-/datum/computer_file/program/supply_base/proc/GetSavedCartTotal(list/cart_data)
-	return round(SSsupply.CollectPriceForList(cart_data, faction), 0.01)
+/datum/computer_file/program/supply_base/proc/GetSavedCartTotal(list/cart_data, list/totals = null)
+	totals ||= SSsupply.GetCartTotals(cart_data, faction)
+	return totals["subtotal"]
 
 /datum/computer_file/program/supply_base/proc/LoadSavedCartDirect(raw_index)
 	var/index = isnum(raw_index) ? raw_index : text2num(raw_index)
@@ -387,3 +388,6 @@ GLOBAL_LIST_EMPTY(cargo_item_icon_cache)
 		chosen_category = target_category
 		RemoveFromShopList(target_good_id, remove_amount, target_station, target_category)
 	return TRUE
+
+/datum/computer_file/program/supply_base/proc/GetCartTotals()
+	return SSsupply.GetCartTotals(shopping_list, faction)

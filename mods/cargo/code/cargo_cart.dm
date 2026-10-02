@@ -118,9 +118,12 @@
 /datum/controller/subsystem/supply/proc/GetCartTotals(list/cart, buyer_faction = null)
 	var/count = 0
 	var/price = 0
+	var/list/price_snapshot = list()
 	for(var/list/item as anything in ExtractCartItems(cart))
 		count += item["count"]
-		price += GetImportCost(item["good_id"], item["station"], buyer_faction, item["cat"]) * item["count"]
+		var/unit_price = GetImportCost(item["good_id"], item["station"], buyer_faction, item["cat"])
+		SnapshotCartItem(price_snapshot, item, buyer_faction, unit_price)
+		price += unit_price * item["count"]
 	var/subtotal = round(price, 0.01)
 	var/fee = round(subtotal * handling_fee, 0.01)
-	return list("count" = count, "subtotal" = subtotal, "fee" = fee, "total" = subtotal + fee)
+	return list("count" = count, "raw_subtotal" = price, "subtotal" = subtotal, "fee" = fee, "total" = subtotal + fee, "price_snapshot" = price_snapshot)

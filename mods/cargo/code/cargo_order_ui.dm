@@ -1,7 +1,7 @@
-/datum/computer_file/program/supply_order/proc/PopulateBaseUiData(list/data, mob/user)
+/datum/computer_file/program/supply_order/proc/PopulateBaseUiData(list/data, mob/user, list/totals = null)
 	CheckAccountValidity(user)
 	var/obj/item/card/id/available_id = GetAvailableIdCard(user)
-	var/list/totals = GetCartTotals()
+	totals ||= GetCartTotals()
 
 	data["src"] = ref(src)
 	data["screen"] = current_tab
@@ -53,10 +53,10 @@
 		data["categories"] = list()
 		data["goods"] = list()
 
-/datum/computer_file/program/supply_order/proc/BuildCartScreenData(list/data)
-	var/list/totals = GetCartTotals()
+/datum/computer_file/program/supply_order/proc/BuildCartScreenData(list/data, list/totals = null)
+	totals ||= GetCartTotals()
 	var/block = GetSubmitBlockReason(totals)
-	data["cart_groups"] = SerializeShopListGroups(shopping_list, faction)
+	data["cart_groups"] = SerializeShopListGroups(shopping_list, faction, totals["price_snapshot"])
 	data["can_submit_order"] = !block
 	data["submit_block_reason"] = block || ""
 	data["order_reason"] = order_reason || ""

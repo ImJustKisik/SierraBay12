@@ -43,8 +43,9 @@
 /datum/computer_file/program/supply_order/GetDefaultSavedCartName()
 	return "Preset #[++saved_cart_id]"
 
-/datum/computer_file/program/supply_order/GetSavedCartTotal(list/cart_data)
-	var/subtotal = SSsupply.CollectPriceForList(cart_data, faction)
+/datum/computer_file/program/supply_order/GetSavedCartTotal(list/cart_data, list/totals = null)
+	totals ||= SSsupply.GetCartTotals(cart_data, faction)
+	var/subtotal = totals["raw_subtotal"]
 	return round(subtotal + round(subtotal * SSsupply.handling_fee, 0.01), 0.01)
 
 /datum/computer_file/program/supply_order/CanAddGoodsToCart()
@@ -444,10 +445,3 @@
 		ui = new(user, src, ui_key, "mods-cargo_order_client.tmpl", "Supply Order Client", 900, 700, state = GLOB.default_state)
 		ui.set_initial_data(data)
 		ui.open()
-
-/datum/computer_file/program/supply_order/proc/GetCartTotals()
-	var/count = SSsupply.CollectCountsFrom(shopping_list)
-	var/subtotal = round(SSsupply.CollectPriceForList(shopping_list, faction), 0.01)
-	var/fee = round(subtotal * SSsupply.handling_fee, 0.01)
-	var/total = subtotal + fee
-	return list("count" = count, "subtotal" = subtotal, "fee" = fee, "total" = total)

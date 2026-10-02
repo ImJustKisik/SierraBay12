@@ -39,7 +39,6 @@
 	var/faction_color = TradeRelationsColor(station_faction ? station_faction.relationship[faction] : null) || "#ffffff"
 	var/time_remaining = max(0, (target_station.update_timer_start + target_station.update_time) - world.time)
 	var/block_reason = GetStationTradeBlockReason(target_station)
-	var/purchase_block_reason = GetStationTradeBlockReason(target_station)
 	var/list/status_data = GetStationStatusData(target_station)
 	var/list/availability_status = target_station.GetAvailabilityStatusData()
 	var/trade_window_remaining = target_station.GetAvailabilityWindowRemaining()
@@ -63,7 +62,7 @@
 		"market_tone" = target_station.GetLiveMarketStatusTone(),
 		"market_desc" = target_station.GetLiveMarketStatusDescription(),
 		"block_reason" = block_reason || "",
-		"can_trade" = !purchase_block_reason,
+		"can_trade" = !block_reason,
 		"trade_window_remaining" = isnum(trade_window_remaining) ? FormatCountdown(trade_window_remaining) : ""
 	)
 
@@ -187,7 +186,7 @@
 		)))
 	return result
 
-/datum/computer_file/program/supply/proc/PopulateBaseTradeUiData(list/data, mob/user = null)
+/datum/computer_file/program/supply/proc/PopulateBaseTradeUiData(list/data, mob/user = null, list/totals = null)
 	data["src"] = ref(src)
 	data["screen"] = trade_screen
 	data["log_screen"] = log_screen
@@ -201,7 +200,7 @@
 	data["user_greeting"] = GetUserGreeting(user)
 	PopulateAccountUiData(data)
 	PopulateBeaconUiData(data)
-	PopulateCartSummaryUiData(data)
+	PopulateCartSummaryUiData(data, totals)
 
 /datum/computer_file/program/supply/proc/PopulateAccountUiData(list/data)
 	data["has_account"] = istype(account)
@@ -222,11 +221,11 @@
 	data["available_receiving_beacons"] = SerializeLocalBeacons("receiving")
 	data["available_sending_beacons"] = SerializeLocalBeacons("sending")
 
-/datum/computer_file/program/supply/proc/PopulateCartSummaryUiData(list/data)
-	data["cart_count"] = SSsupply.CollectCountsFrom(shopping_list)
-	var/cart_total = SSsupply.CollectPriceForList(shopping_list, faction)
-	data["cart_total"] = round(cart_total, 0.01)
-	data["cart_fee"] = round(cart_total * SSsupply.handling_fee, 0.01)
+/datum/computer_file/program/supply/proc/PopulateCartSummaryUiData(list/data, list/totals = null)
+	totals ||= GetCartTotals()
+	data["cart_count"] = totals["count"]
+	data["cart_total"] = totals["subtotal"]
+	data["cart_fee"] = totals["fee"]
 	var/cart_range_block = receiving ? SSsupply.GetShopListTradeRangeBlockReason(receiving, shopping_list) : null
 	data["cart_trade_block_reason"] = cart_range_block || ""
 	var/orders_locked = (world.time < order_cooldown_until)
@@ -236,9 +235,9 @@
 	data["order_count"] = length(SSsupply.order_queue)
 	var/pending_total = 0
 	for(var/order_id as anything in SSsupply.order_queue)
-		var/list/order_entry = SSsupply.order_queue[order_id]
-		if(islist(order_entry))
-			pending_total += (order_entry["cost"] + order_entry["fee"])
+		var/datum/cargo_order/order_entry = SSsupply.order_queue[order_id]
+		if(istype(order_entry))
+			pending_total += (order_entry.cost + order_entry.fee)
 	data["pending_orders_total"] = round(pending_total, 0.01)
 
 /datum/computer_file/program/supply/proc/GetUserGreeting(mob/user)
@@ -326,17 +325,11 @@
 	data["export_target_station"] = selected_station ? selected_station.name : ""
 	data["has_export_target_station"] = istype(selected_station)
 
-/datum/computer_file/program/supply/proc/BuildCartScreenData(list/data)
-	var/receiving_id = GetBeaconDisplayId(receiving)
-	var/cart_trade_block = receiving ? SSsupply.GetShopListTradeRangeBlockReason(receiving, shopping_list) : null
-	var/orders_locked = (world.time < order_cooldown_until)
-	data["cart_groups"] = SerializeShopListGroups(shopping_list, faction)
-	data["cart_trade_block_reason"] = cart_trade_block || ""
-	data["can_purchase_cart"] = istype(account) && !!receiving_id && length(shopping_list) && !cart_trade_block
-	data["can_build_order"] = istype(account) && length(shopping_list) && !orders_locked
+/datum/computer_file/program/supply/proc/BuildCartScreenData(list/data, list/totals = null)
+	totals ||= GetCartTotals()
+	data["cart_groups"] = SerializeShopListGroups(shopping_list, faction, totals["price_snapshot"])
 	data["can_save_cart"] = !!length(shopping_list)
 	data["saved_carts"] = SerializeSavedCarts()
-	data["orders_locked"] = orders_locked
 
 /datum/computer_file/program/supply/proc/BuildOrdersScreenData(list/data, mob/user)
 	var/selected_order_data = SerializeSelectedOrder()
@@ -372,7 +365,8 @@
 /datum/computer_file/program/supply/proc/BuildTradeUiData(mob/user)
 	var/list/data = get_header_data() || list()
 	ValidateSelectedTradeBeacons()
-	PopulateBaseTradeUiData(data, user)
+	var/list/totals = GetCartTotals()
+	PopulateBaseTradeUiData(data, user, totals)
 	switch(trade_screen)
 		if(SETTINGS_SCREEN)
 			BuildSettingsScreenData(data)
@@ -381,7 +375,7 @@
 		if(EXPORT_SCREEN)
 			BuildExportScreenData(data)
 		if(CART_SCREEN)
-			BuildCartScreenData(data)
+			BuildCartScreenData(data, totals)
 		if(ORDER_SCREEN)
 			BuildOrdersScreenData(data, user)
 		if(CONTRACT_SCREEN)

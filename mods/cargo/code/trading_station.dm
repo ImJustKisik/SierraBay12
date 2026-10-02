@@ -29,7 +29,6 @@
 	var/list/inventory = list()
 	var/hidden_inv_unlocked = FALSE
 	var/list/hidden_inventory = list()
-	var/list/amounts_of_goods = list()
 	var/unique_good_count = 0
 	var/next_good_offer_id = 0
 
@@ -91,19 +90,6 @@
 	SetupOvermapPlacement(spawn_turf, force_discovered)
 	RegisterStation()
 
-/datum/trading_station/proc/SyncAmountsOfGoods()
-	amounts_of_goods = list()
-	for(var/category_name in offers_by_category)
-		var/list/cat_offers = offers_by_category[category_name]
-		if(!islist(cat_offers))
-			continue
-		var/list/cat_amounts = list()
-		for(var/offer_id in cat_offers)
-			var/datum/trade_offer/offer = cat_offers[offer_id]
-			if(istype(offer))
-				cat_amounts[offer_id] = offer.stock
-		amounts_of_goods[category_name] = cat_amounts
-
 /datum/trading_station/Destroy()
 	if(overmap_location)
 		GLOB.entered_event.unregister(overmap_location, src, .proc/Discovered)
@@ -125,4 +111,6 @@
 		metabolic_consumption_tags.Cut()
 		metabolic_consumption_tags = null
 	DestroyOfferRegistries()
+	inventory = null
+	hidden_inventory = null
 	return ..()

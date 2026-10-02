@@ -95,11 +95,11 @@
 
 /datum/trading_station/proc/GetMetabolicCandidates(list/filter_tags)
 	var/list/candidates = list()
-	if(!islist(inventory) || !length(inventory) || !islist(filter_tags) || !length(filter_tags))
+	if(!islist(offers_by_category) || !length(offers_by_category) || !islist(filter_tags) || !length(filter_tags))
 		return candidates
 
-	for(var/category_name in inventory)
-		var/list/category = inventory[category_name]
+	for(var/category_name in offers_by_category)
+		var/list/category = offers_by_category[category_name]
 		if(!islist(category))
 			continue
 		for(var/good_id in category)
@@ -126,8 +126,8 @@
 
 /datum/trading_station/proc/CollectRestockCandidates(budget)
 	var/list/candidates = list()
-	for(var/category_name in inventory)
-		var/list/category = inventory[category_name]
+	for(var/category_name in offers_by_category)
+		var/list/category = offers_by_category[category_name]
 		if(!islist(category))
 			continue
 		for(var/good_id in category)
