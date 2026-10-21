@@ -180,50 +180,24 @@
 		return list()
 	return ..()
 
+// [SIERRA-EDIT] - AIR_ALARM_PROCESSING: monitoring is dispatched by SSairalarms.
 /obj/machinery/alarm/Process()
 	if(inoperable() || shorted || buildstage != 2)
-		return
+		return PROCESS_KILL
 
 	var/turf/simulated/location = loc
-	if(!istype(location))	return//returns if loc is not simulated
+	if(!istype(location))
+		return PROCESS_KILL
 
 	var/datum/gas_mixture/environment = location.return_air()
 
-	//Handle temperature adjustment here.
-	if(environment.return_pressure() > ONE_ATMOSPHERE*0.05)
-		handle_heating_cooling(environment)
-
-	var/old_level = danger_level
-	danger_level = overall_danger_level(environment)
-
-	if (old_level != danger_level)
-		if(danger_level == 2)
-			playsound(src.loc, 'sound/machines/airalarm.ogg', 25, 0, 4)
-		apply_danger_level(danger_level)
-
-	if (pressure_dangerlevel != 0)
-		if (breach_detected())
-			mode = AALARM_MODE_OFF
-			apply_mode()
-
-	if (mode==AALARM_MODE_CYCLE && environment.return_pressure()<ONE_ATMOSPHERE*0.05)
-		breach_start_cooldown()
-		mode=AALARM_MODE_FILL
-		apply_mode()
-
-	//atmos computer remote controll stuff
-	switch(rcon_setting)
-		if(RCON_NO)
-			remote_control = 0
-		if(RCON_AUTO)
-			if(danger_level == 2)
-				remote_control = 1
-			else
-				remote_control = 0
-		if(RCON_YES)
-			remote_control = 1
-
-	return
+	if(environment.return_pressure() <= ONE_ATMOSPHERE * 0.05)
+		return PROCESS_KILL
+	handle_heating_cooling(environment)
+	queue_atmosphere_check()
+	if(!regulating_temperature)
+		return PROCESS_KILL
+// [/SIERRA-EDIT]
 
 /obj/machinery/alarm/proc/handle_heating_cooling(datum/gas_mixture/environment)
 	if (!regulating_temperature)
@@ -316,6 +290,7 @@
 
 /obj/machinery/alarm/proc/breach_end_cooldown()
 	breach_cooldown = FALSE
+	queue_atmosphere_check() // [SIERRA-ADD] - AIR_ALARM_PROCESSING
 	return
 
 //disables breach detection temporarily
@@ -437,6 +412,7 @@
 	//TODO: make it so that players can choose between applying the new mode to the room they are in (related area) vs the entire alarm area
 	for (var/obj/machinery/alarm/AA in alarm_area)
 		AA.mode = mode
+		AA.queue_atmosphere_check() // [SIERRA-ADD] - AIR_ALARM_PROCESSING
 
 	breach_start_cooldown()
 
