@@ -27,6 +27,15 @@ SUBSYSTEM_DEF(airalarms)
 	monitor_cycle = old_system.monitor_cycle
 	next_audit = 0
 
+/datum/controller/subsystem/airalarms/UpdateStat(time)
+	if (PreventUpdateStat(time))
+		return ..()
+	..({"\
+		Zones: [length(watched_zones)] \
+		Dirty zones: [length(dirty_zones) + length(current_zones)] \
+		Pending alarms: [length(dirty_alarms) + length(current_alarms)]\
+	"})
+
 /datum/controller/subsystem/airalarms/proc/queue_zone(zone/changed_zone)
 	if(!length(changed_zone.air_alarms) || changed_zone.invalid)
 		return
