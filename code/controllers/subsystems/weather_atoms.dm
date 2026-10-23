@@ -2,7 +2,7 @@ SUBSYSTEM_DEF(weather_atoms)
 	name     = "Weather Atoms"
 	wait     = 2 SECONDS
 	priority = SS_PRIORITY_WEATHER
-	flags    = SS_NO_INIT
+	flags    = SS_NO_INIT | SS_BACKGROUND
 	var/list/weather_atoms = list()
 	var/list/processing_atoms
 
@@ -18,6 +18,10 @@ SUBSYSTEM_DEF(weather_atoms)
 
 /datum/controller/subsystem/weather_atoms/fire(resumed = 0)
 	if(!resumed)
+		// [SIERRA-ADD] - WEATHER_OPT: Fast exit if no weather systems exist in world
+		if(!length(SSweather.weather_systems))
+			return
+		// [/SIERRA-ADD]
 		processing_atoms = weather_atoms.Copy()
 
 	atom          = null
@@ -34,15 +38,16 @@ SUBSYSTEM_DEF(weather_atoms)
 			weather_atoms -= atom
 			continue
 
-		// If weather does not exist, we don't care.
-		weather = atom.get_affecting_weather()
-		weather_state = weather?.weather_system?.current_state
-		if(!istype(weather_state))
+		// [SIERRA-EDIT] - WEATHER_OPT: Single get_turf() + turf.weather check instead of double get_turf() and is_outside()
+		var/turf/turf = get_turf(atom)
+		weather = turf?.weather
+		if(!weather)
 			continue
 
-		// Not outside, or not on a turf with a Z- weather is not relevant.
-		if(!atom.z || !atom.is_outside())
+		weather_state = weather.weather_system?.current_state
+		if(!istype(weather_state))
 			continue
+		// [/SIERRA-EDIT]
 
 		// Process the atom and return early if needed.
 		if(atom.process_weather(weather, weather_state) == PROCESS_KILL)

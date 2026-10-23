@@ -441,6 +441,14 @@ var/global/const/enterloopsanity = 100
 
 	if(.)
 		refresh_vis_contents()
+		// [SIERRA-ADD] - WEATHER_OPT: Update cleanables on turf when weather exposure changes
+		for(var/obj/decal/cleanable/C in src)
+			if(C.weather_sensitive)
+				if(weather)
+					SSweather_atoms.weather_atoms |= C
+				else
+					SSweather_atoms.weather_atoms -= C
+		// [/SIERRA-ADD]
 
 	// Propagate our weather downwards if we permit it.
 	if(force_update_below || (is_open() && .))

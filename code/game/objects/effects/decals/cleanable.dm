@@ -23,9 +23,6 @@
 	hud_overlay.plane = EFFECTS_ABOVE_LIGHTING_PLANE
 	set_cleanable_scent()
 
-	if(weather_sensitive)
-		SSweather_atoms.weather_atoms += src
-
 /obj/decal/cleanable/Initialize(ml, _age)
 	if(!isnull(_age))
 		age = _age
@@ -33,6 +30,13 @@
 		src.icon_state = pick(src.random_icon_states)
 	SSpersistence.track_value(src, /datum/persistent/filth)
 	. = ..()
+
+	// [SIERRA-EDIT] - WEATHER_OPT: Only register if actually outdoors on a z-level with active weather
+	if(weather_sensitive && isturf(loc))
+		var/turf/T = loc
+		if(T.weather || (T.z && LAZYACCESS(SSweather.weather_by_z, T.z) && T.is_outside()))
+			SSweather_atoms.weather_atoms |= src
+	// [/SIERRA-EDIT]
 
 /obj/decal/cleanable/Destroy()
 	SSpersistence.forget_value(src, /datum/persistent/filth)
