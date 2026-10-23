@@ -78,11 +78,14 @@ Scent intensity
 	var/singleton/scent_intensity/intensity = /singleton/scent_intensity
 	var/descriptor = SCENT_DESC_SMELL //unambiguous descriptor of smell; food is generally good, sewage is generally bad. how 'nice' the scent is
 	var/range = 1 //range in tiles
+	var/emit_interval = 5 SECONDS //minimum time between scans for smellers; the shortest intensity cooldown is 1 minute, so this is imperceptible
+	var/next_emit = 0
 
 /datum/extension/scent/New()
 	..()
 	if(ispath(intensity))
 		intensity = GET_SINGLETON(intensity)
+	next_emit = world.time + rand(0, emit_interval) // stagger instances so they do not all scan on the same tick
 	START_PROCESSING(SSprocessing, src)
 
 /datum/extension/scent/Destroy()
@@ -94,18 +97,22 @@ Scent intensity
 		crash_with("Scent extension with scent '[scent]', intensity '[intensity]', descriptor '[descriptor]' and range of '[range]' attempted to emit_scent() without a holder.")
 		qdel(src)
 		return PROCESS_KILL
+	if(world.time < next_emit)
+		return
+	next_emit = world.time + emit_interval
 	emit_scent()
 
 /datum/extension/scent/proc/emit_scent()
 	for(var/mob/living/carbon/human/H in all_hearers(holder, range))
+		if(H.last_smelt >= world.time)
+			continue
+		if(H.stat != CONSCIOUS || H.failed_last_breath || H.wear_mask || H.head && H.head.permeability_coefficient < 1)
+			continue
 		var/turf/T = get_turf(H.loc)
-		if(!T)
+		if(!T || !T.return_air())
 			continue
-		if(H.stat != CONSCIOUS || H.failed_last_breath || H.wear_mask || H.head && H.head.permeability_coefficient < 1 || !T.return_air())
-			continue
-		if(H.last_smelt < world.time)
-			intensity.PrintMessage(H, descriptor, scent)
-			H.last_smelt = world.time + intensity.cooldown
+		intensity.PrintMessage(H, descriptor, scent)
+		H.last_smelt = world.time + intensity.cooldown
 
 /*****
 Custom subtype
