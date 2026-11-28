@@ -403,15 +403,14 @@ nanoui is used to open and update nano browser uis
 		head_content += "<link rel='stylesheet' type='text/css' href='[filename]'> "
 
 	var/template_data_json = "{}" // An empty JSON object
-	// [SIERRA-EDIT]
+	// [SIERRA-EDIT] - Escape single quotes for single-quoted body attributes and escape JS [] inside {"..."}.
 	if (length(templates) > 0)
-		template_data_json = html_encode(strip_improper(json_encode(templates)))
+		template_data_json = replacetext(html_encode(strip_improper(json_encode(templates))), "'", "&#39;")
 
 	var/list/send_data = get_send_data(initial_data)
-	var/initial_data_json = html_encode(strip_improper(json_encode(send_data)))
+	var/initial_data_json = replacetext(html_encode(strip_improper(json_encode(send_data))), "'", "&#39;")
 
-	var/url_parameters_json = html_encode(json_encode(list("src" = "\ref[src]")))
-	// [/SIERRA-EDIT]
+	var/url_parameters_json = replacetext(html_encode(json_encode(list("src" = "\ref[src]"))), "'", "&#39;")
 
 	return {"
 <!DOCTYPE html>
@@ -428,7 +427,7 @@ nanoui is used to open and update nano browser uis
 				}
 				else
 				{
-					window._pendingNanoUpdates = window._pendingNanoUpdates || [];
+					window._pendingNanoUpdates = window._pendingNanoUpdates || \[];
 					window._pendingNanoUpdates.push(jsonString);
 				}
 			}
@@ -448,6 +447,7 @@ nanoui is used to open and update nano browser uis
 	</body>
 </html>
 	"}
+	// [/SIERRA-EDIT]
 
  /**
   * Open this UI
