@@ -19,11 +19,13 @@
 		if(new_metadata)
 			set_underwear_metadata(underwear, gt, new_metadata)
 			return TOPIC_REFRESH_UPDATE_PREVIEW
+		return TOPIC_NOACTION
 	else if(href_list["change_backpack"])
 		var/new_backpack = tgui_input_list(user, "Choose backpack style:", CHARACTER_PREFERENCE_INPUT_TITLE, backpacks_by_name, pref.backpack)
 		if(!isnull(new_backpack) && CanUseTopic(user))
 			pref.backpack = backpacks_by_name[new_backpack]
 			return TOPIC_REFRESH_UPDATE_PREVIEW
+		return TOPIC_NOACTION
 	else if(href_list["backpack"] && href_list["tweak"])
 		var/backpack_name = href_list["backpack"]
 		if(!(backpack_name in backpacks_by_name))
@@ -36,6 +38,7 @@
 		if(new_metadata)
 			set_backpack_metadata(bo, bt, new_metadata)
 			return TOPIC_REFRESH_UPDATE_PREVIEW
+		return TOPIC_NOACTION
 	else if(href_list["change_sensor_setting"])
 		var/switchMode = tgui_input_list(user, "Select a sensor mode:", "Suit Sensor Mode", SUIT_SENSOR_MODES, pref.sensor_setting)
 		if(!switchMode || !CanUseTopic(user))

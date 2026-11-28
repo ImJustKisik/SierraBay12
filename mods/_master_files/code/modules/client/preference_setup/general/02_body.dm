@@ -30,6 +30,7 @@
 				slot.age = pref.age
 			pref.skills_allocated = pref.sanitize_skills(pref.skills_allocated)		// The age may invalidate skill loadouts
 			return TOPIC_REFRESH
+		return TOPIC_NOACTION
 
 	else if(href_list["random"])
 		pref.randomize_appearance_and_body_for()
@@ -57,12 +58,14 @@
 						pref.height = GLOB.heights_list[idx]
 				return TOPIC_REFRESH_UPDATE_PREVIEW
 	//[/SIERRA-EDIT] HEIGHT
+		return TOPIC_NOACTION
 
 	else if(href_list["blood_type"])
 		var/new_b_type = tgui_input_list(user, "Choose your character's blood-type:", CHARACTER_PREFERENCE_INPUT_TITLE, valid_bloodtypes, null)
 		if(new_b_type && CanUseTopic(user))
 			pref.b_type = new_b_type
 			return TOPIC_REFRESH
+		return TOPIC_NOACTION
 
 	else if(href_list["show_species"])
 		var/choice = tgui_input_list(user, "Which species would you like to look at?", null, GLOB.playable_species, null)
@@ -70,6 +73,7 @@
 			var/singleton/species/current_species = GLOB.species_by_name[choice]
 			show_browser(user, current_species.get_description(), "window=species;size=700x400")
 			return TOPIC_HANDLED
+		return TOPIC_NOACTION
 
 	else if(href_list["set_species"])
 
@@ -126,6 +130,7 @@
 		if(new_hair && HasAppearanceFlag(GLOB.species_by_name[pref.species], SPECIES_APPEARANCE_HAS_HAIR_COLOR) && CanUseTopic(user))
 			pref.head_hair_color = new_hair
 			return TOPIC_REFRESH_UPDATE_PREVIEW
+		return TOPIC_NOACTION
 
 	else if(href_list["hair_style"])
 		var/list/valid_hairstyles = mob_species.get_hair_styles()
@@ -145,6 +150,7 @@
 		if(new_h_style && CanUseTopic(user) && (new_h_style in mob_species.get_hair_styles()))
 			pref.head_hair_style = new_h_style
 			return TOPIC_REFRESH_UPDATE_PREVIEW
+		return TOPIC_NOACTION
 
 	else if(href_list["facial_color"])
 		if(!HasAppearanceFlag(mob_species, SPECIES_APPEARANCE_HAS_HAIR_COLOR))
@@ -153,6 +159,7 @@
 		if(new_facial && HasAppearanceFlag(GLOB.species_by_name[pref.species], SPECIES_APPEARANCE_HAS_HAIR_COLOR) && CanUseTopic(user))
 			pref.facial_hair_color = new_facial
 			return TOPIC_REFRESH_UPDATE_PREVIEW
+		return TOPIC_NOACTION
 
 	else if(href_list["eye_color"])
 		if(!HasAppearanceFlag(mob_species, SPECIES_APPEARANCE_HAS_EYE_COLOR))
@@ -161,6 +168,7 @@
 		if(new_eyes && HasAppearanceFlag(GLOB.species_by_name[pref.species], SPECIES_APPEARANCE_HAS_EYE_COLOR) && CanUseTopic(user))
 			pref.eye_color = new_eyes
 			return TOPIC_REFRESH_UPDATE_PREVIEW
+		return TOPIC_NOACTION
 
 	else if(href_list["base_skin"])
 		if(!HasAppearanceFlag(mob_species, SPECIES_APPEARANCE_HAS_BASE_SKIN_COLOURS))
@@ -169,6 +177,7 @@
 		if(new_s_base && CanUseTopic(user))
 			pref.base_skin = new_s_base
 			return TOPIC_REFRESH_UPDATE_PREVIEW
+		return TOPIC_NOACTION
 
 	else if(href_list["skin_tone"])
 		if(!HasAppearanceFlag(mob_species, SPECIES_APPEARANCE_HAS_A_SKIN_TONE))
@@ -186,6 +195,7 @@
 		if(new_skin && HasAppearanceFlag(GLOB.species_by_name[pref.species], SPECIES_APPEARANCE_HAS_SKIN_COLOR) && CanUseTopic(user))
 			pref.skin_color = new_skin
 			return TOPIC_REFRESH_UPDATE_PREVIEW
+		return TOPIC_NOACTION
 
 	else if(href_list["facial_style"])
 		var/list/valid_facialhairstyles = mob_species.get_facial_hair_styles(pref.gender)
@@ -205,6 +215,7 @@
 		if(new_f_style && CanUseTopic(user) && (new_f_style in mob_species.get_facial_hair_styles(pref.gender)))
 			pref.facial_hair_style = new_f_style
 			return TOPIC_REFRESH_UPDATE_PREVIEW
+		return TOPIC_NOACTION
 
 	else if(href_list["marking_style"])
 		var/list/disallowed_markings = list()
@@ -264,6 +275,7 @@
 		if(mark_color && CanUseTopic(user))
 			pref.body_markings[M] = "[mark_color]"
 			return TOPIC_REFRESH_UPDATE_PREVIEW
+		return TOPIC_NOACTION
 
 	else if(href_list["reset_limbs"])
 		reset_limbs()
