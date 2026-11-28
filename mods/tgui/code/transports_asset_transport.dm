@@ -45,11 +45,13 @@
 			stack_trace(error_msg)
 			log_debug(error_msg)
 		else
+			SSassets?.index_preload_asset(OACI, src)
 			if(length(ACI.namespace))
 				return ACI
 			return OACI
 
 	SSassets.cache[asset_name] = ACI
+	SSassets?.index_preload_asset(ACI, src)
 	return ACI
 
 
@@ -138,15 +140,30 @@
 
 /// Precache files without clogging up the browse() queue, used for passively sending files on connection start.
 /datum/asset_transport/proc/send_assets_slow(client/client, list/files, filerate = 6)
-	var/startingfilerate = filerate
+	if(!client || !length(files))
+		return FALSE
+	var/list/batch = list()
+	var/sent_any = FALSE
 	for(var/file in files)
 		if(!client)
 			break
-		if(send_assets(client, file))
-			if(!(--filerate))
-				filerate = startingfilerate
+		var/datum/asset_cache_item/ACI = istype(file, /datum/asset_cache_item) ? file : files[file]
+		if(!istype(ACI) && !(ACI = SSassets.cache[file]))
+			continue
+		var/asset_key = istext(file) ? file : ACI.name
+		var/local_name = (dont_mutate_filenames || ACI.legacy || ACI.keep_local_name || (ACI.namespace && !ACI.namespace_parent)) ? asset_key : "asset.[ACI.hash][ACI.ext]"
+		if(client.sent_assets[local_name] == ACI.hash)
+			continue
+		batch[asset_key] = ACI
+		if(length(batch) >= filerate)
+			if(send_assets(client, batch))
+				sent_any = TRUE
 				client.browse_queue_flush()
-			stoplag(0) //queuing calls like this too quickly can cause issues in some client versions
+			batch.Cut()
+			stoplag(0)
+	if(client && length(batch) && send_assets(client, batch))
+		sent_any = TRUE
+	return sent_any
 
 /// Check the config is valid to load this transport
 /// Returns TRUE or FALSE

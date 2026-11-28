@@ -187,10 +187,7 @@
 	prefs.last_id = computer_id			//these are gonna be used for banning
 	fps = prefs.clientfps
 
-	// [SIERRA-ADD] - CELADON DISCORD INTEGRATION
-	load_player_discord(src)
-	// [SIERRA-ADD]
-
+	// [SIERRA-EDIT] - Defer blocking SQL lookups off /client/New().
 	. = ..()	//calls mob.Login()
 	//view = get_preference_value(/datum/client_preference/client_view)
 
@@ -213,8 +210,6 @@
 			winset(src, null, "command=\".configure graphics-hwmode off\"")
 			sleep(2) // wait a bit more, possibly fixes hardware mode not re-activating right
 			winset(src, null, "command=\".configure graphics-hwmode on\"")
-
-	log_client_to_db()
 
 	send_resources()
 
@@ -240,23 +235,36 @@
 	if(SSinput.initialized)
 		set_macros()
 	// [/SIERRA-ADD]
-	// This turns out to be a touch too much when a bunch of people are connecting at once from a restart during init.
-	if (GAME_STATE & RUNLEVELS_DEFAULT)
-		spawn()
-		log_and_message_staff(SPAN_NOTICE("[key_name_admin(src)] has connected to the server."))
-		if (!check_rights(R_MOD, FALSE, src))
-			// Check connections
-			var/list/connections = fetch_connections()
-			var/list/ckeys = _unique_ckeys_from_connections(connections) - ckey
-			if (length(ckeys))
-				log_and_message_staff(SPAN_INFO("[key_name_admin(src)] has connection details associated with [length(ckeys)] other ckeys in the log."))
-				have_connection_warn = TRUE // [SIERRA-ADD]
+	// Run SQL connect logging, discord lookup, and connection/ban checks asynchronously off the connect tick.
+	spawn(1)
+		if(!src)
+			return
+		load_player_discord(src)
+		if(!src)
+			return
+		log_client_to_db()
+		if(!src)
+			return
+		if(GAME_STATE & RUNLEVELS_DEFAULT)
+			log_and_message_staff(SPAN_NOTICE("[key_name_admin(src)] has connected to the server."))
+			if(!check_rights(R_MOD, FALSE, src))
+				// Check connections
+				var/list/connections = fetch_connections()
+				if(!src)
+					return
+				var/list/ckeys = _unique_ckeys_from_connections(connections) - ckey
+				if(length(ckeys))
+					log_and_message_staff(SPAN_INFO("[key_name_admin(src)] has connection details associated with [length(ckeys)] other ckeys in the log."))
+					have_connection_warn = TRUE // [SIERRA-ADD]
 
-			// Check bans
-			var/list/bans = _find_bans_in_connections(connections)
-			if (length(bans))
-				log_and_message_staff(SPAN_DANGER("[key_name_admin(src)] has connection details associated with [length(bans)] active bans."))
-				have_bans_warn = TRUE // [SIERRA-ADD]
+				// Check bans
+				var/list/bans = _find_bans_in_connections(connections)
+				if(!src)
+					return
+				if(length(bans))
+					log_and_message_staff(SPAN_DANGER("[key_name_admin(src)] has connection details associated with [length(bans)] active bans."))
+					have_bans_warn = TRUE // [SIERRA-ADD]
+	// [/SIERRA-EDIT]
 
 	//////////////
 	//DISCONNECT//
@@ -316,13 +324,16 @@
 
 	var/sql_ckey = sql_sanitize_text(src.ckey)
 
-	var/DBQuery/query = dbcon.NewQuery("SELECT id, datediff(Now(),firstseen) as age FROM erro_player WHERE ckey = '[sql_ckey]'")
+	// [SIERRA-EDIT] - Combine player lookup and staffwarn fetch into one query.
+	var/DBQuery/query = dbcon.NewQuery("SELECT id, datediff(Now(),firstseen) as age, staffwarn FROM erro_player WHERE ckey = '[sql_ckey]'")
 	query.Execute()
 	var/sql_id = 0
 	player_age = 0	// New players won't have an entry so knowing we have a connection we set this to zero to be updated if their is a record.
 	while(query.NextRow())
 		sql_id = query.item[1]
 		player_age = text2num(query.item[2])
+		if(length(query.item[3]))
+			src.staffwarn = query.item[3]
 		break
 
 	var/DBQuery/query_ip = dbcon.NewQuery("SELECT ckey FROM erro_player WHERE ip = '[address]'")
@@ -338,11 +349,7 @@
 	while(query_cid.NextRow())
 		related_accounts_cid += "[query_cid.item[1]], "
 		break
-
-	var/DBQuery/query_staffwarn = dbcon.NewQuery("SELECT staffwarn FROM erro_player WHERE ckey = '[sql_ckey]' AND !ISNULL(staffwarn)")
-	query_staffwarn.Execute()
-	if(query_staffwarn.NextRow())
-		src.staffwarn = query_staffwarn.item[1]
+	// [/SIERRA-EDIT]
 
 	//Just the standard check to see if it's actually a number
 	if(sql_id)
@@ -401,8 +408,7 @@
 
 //send resources to the client. It's here in its own proc so we can move it around easiliy if need be
 /client/proc/send_resources()
-	// [SIERRA-EDIT] - TGUI - Share the startup resource manifest with SSassets.
-	getFiles(arglist(client_resource_files()))
+	// [SIERRA-EDIT] - TGUI - Validate client asset cache first instead of pushing 52 legacy resources synchronously in New().
 	addtimer(new Callback(src, PROC_REF(after_send_resources)), 1 SECOND)
 	// [/SIERRA-EDIT]
 
@@ -470,8 +476,9 @@
 /client/proc/after_send_resources()
 	// [SIERRA-EDIT] - TGUI - Validate cached assets before donor transport preload.
 	show_browser(src, 'mods/tgui/resources/validate_assets.html', "window=asset_cache_browser")
-	if(config.asset_simple_preload)
-		addtimer(new Callback(SSassets.transport, TYPE_PROC_REF(/datum/asset_transport, send_assets_slow), src, SSassets.transport.preload), 5 SECONDS)
+	var/list/deferred_assets = config.asset_simple_preload ? SSassets.transport.preload : SSassets.client_resources
+	if(length(deferred_assets))
+		addtimer(new Callback(SSassets.transport, TYPE_PROC_REF(/datum/asset_transport, send_assets_slow), src, deferred_assets), 5 SECONDS)
 	// [/SIERRA-EDIT]
 
 

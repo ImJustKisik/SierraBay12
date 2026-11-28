@@ -35,15 +35,14 @@
 	if(!islist(preloaded_assets))
 		return
 	// Accept only cache entries known to this server; executable resources reload.
-	for(var/asset_name in SSassets.cache)
-		var/datum/asset_cache_item/item = SSassets.cache[asset_name]
-		if(istype(SSassets.transport, /datum/asset_transport/webroot) && !item.legacy)
-			continue
-		if(lowertext(item.ext) in list(".js", ".jsm", ".htm", ".html"))
-			continue
-		var/local_name = (item.legacy || item.keep_local_name || (item.namespace && !item.namespace_parent) || SSassets.transport.dont_mutate_filenames) ? item.name : "asset.[item.hash][item.ext]"
-		if(preloaded_assets[local_name] == item.hash)
-			sent_assets[local_name] = item.hash
+	var/list/lookup = SSassets.preload_lookup
+	if(!lookup)
+		SSassets.rebuild_preload_lookup()
+		lookup = SSassets.preload_lookup
+	for(var/local_name in preloaded_assets)
+		var/expected_hash = lookup[local_name]
+		if(expected_hash && preloaded_assets[local_name] == expected_hash)
+			sent_assets[local_name] = expected_hash
 
 
 
